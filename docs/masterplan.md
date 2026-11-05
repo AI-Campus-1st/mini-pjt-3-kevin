@@ -67,7 +67,7 @@
 |---|---|---|---|---|
 | D1 | **주제** | 확정 | **주제 C — 공공정책: `지역화폐(지역사랑상품권)`** | 아래 2-1 참조 |
 | D2 | 대상 사용자 | 확정 | 지자체 지역경제과 담당자 (정책 브리핑·민원 응대·예산 논리 준비) | 공공 업무용 = 원문 연결이 핵심이라는 가이드 취지와 일치 |
-| D3 | 지식베이스 규모 | 미정 | 전처리 후 뉴스 16,760건 전량 사용 또는 층화 샘플링(예: 8천건) + 1차 자료 300~600건 | 6일 안에 청킹 2~3회 재임베딩이 가능해야 함. 1차 자료가 청크 기준 20~30%가 되도록 |
+| D3 | 지식베이스 규모 | 확정 | 전처리 후 뉴스 **16,760건 전량** (샘플링 미적용) + 1차 자료 300~600건 | 청크 약 3.5만 개 추정. 재임베딩 시간이 일정을 위협하면 §8 범위 축소 순서에 따라 뉴스 수 축소. 1차 자료 비중은 청크 기준으로 별도 집계 |
 | D4 | 임베딩 | 권장 (Day 2 확정) | baseline: OpenAI `text-embedding-3-small` | 제공 키로 즉시 사용, 저비용. 여유 시 `-3-large` 또는 KURE-v1(로컬)과 동일 평가셋 비교 |
 | D5 | 벡터DB / 원문DB | 권장 | Chroma(PersistentClient, `store/chroma/`) + SQLite(`store/docs.db`) | 가이드 권장 구조 그대로, 파일 영속화. Python 3.14에서 동작 확인 |
 | D6 | 생성 모델 | 권장 | 과정에서 안내된 경량 GPT 모델 (temperature 0) | 평가 재현성 위해 temperature 0, 모델명은 `.env`/config로 고정 |
@@ -107,7 +107,7 @@
 | 비교 | 부산 동백전과 경기지역화폐의 캐시백·인센티브 차이는? / 서울사랑상품권과 인천e음의 운영 방식 차이는? | 뉴스 개별 문서 종합 |
 | 시점 | 연도별 국비 예산은 어떻게 변했나? / 2025년 소비쿠폰은 지역사랑상품권으로 어떻게 지급됐나? / 지역사랑상품권법 개정(재정지원 의무화)은 어떤 경과를 거쳤나? | 뉴스 + 보도자료·의안 |
 | 종합·판단 | 지역화폐의 지역경제 효과에 대한 찬반 근거는? / 운영대행사 수수료·선정 논란의 쟁점은? | 연구보고서 + 뉴스 |
-| 현장 반응 | 사용처 제한에 대한 이용자 불편은? | 뉴스 + 블로그 요약문 |
+| 현장 반응 | 사용처 제한에 대한 이용자 불편은? | 뉴스 + 블로그·카페 요약문 |
 | 답변 불가 | 해외 지역통화 사례와 비교하면? / 특정 가맹점의 매출 증가율은? | 수집 범위 밖 (전체 검색으로 부재 확인 후 확정) |
 
 - "2030년 발행 규모 전망"은 장기 목표 보도가 존재하여 답변 불가 후보에서 제외
@@ -130,7 +130,8 @@ mini-pjt-3-kevin/
 ├── docs/masterplan.md
 ├── config.py                 # 경로, 모델명, 청킹 프리셋, top_k 등 단일 설정원
 ├── data/news_csv_5y/         # 제공 (gitignore)
-├── data/raw/                 # 직접 수집 원본 (html/pdf/json) + manifest.jsonl
+├── data/raw/                 # 직접 수집 원본 (html/pdf/json, gitignore)
+├── data/manifest.jsonl       # 직접 수집 문서의 출처·수집 일시 (git 추적)
 ├── notebooks/eda.ipynb
 ├── collector/  __main__.py load_provided.py crawl_korea_kr.py crawl_assembly.py crawl_reports.py crawl_blog.py storage.py
 ├── indexer/    __main__.py parse.py relevance.py dedup.py chunk.py embed.py verify.py
@@ -143,22 +144,16 @@ mini-pjt-3-kevin/
 
 **규칙:** `app/`은 `rag/`만 import. `rag/`는 읽기 전용 Chroma 접근 + 쿼리 임베딩만 수행(문서 임베딩·쓰기 금지). 평가와 챗봇이 **같은 `rag.chain.build_chain(config)`** 호출.
 
-### 4-2. 문서 ID와 메타데이터 (Day 2 오전 확정 — 이후 변경 금지)
+### 4-2. 명세 문서와 확정 시점
 
-**doc_id = `{source}_{yyyymmdd}_{sha1(url)[:8]}`** → URL 기반 결정적 ID라 재인덱싱해도 불변 → 평가셋 gold_doc_ids가 깨지지 않음.
-
-| 필드 | 예 | 용도 |
+| 문서 | 범위 | 작성·확정 시점 |
 |---|---|---|
-| doc_id | `news_20250212_a1b2c3d4` | 원문 조회, 평가 |
-| doc_type | `news` / `press_release` / `report` / `bill` / `law` / `budget` / `blog` | 필터, 신뢰도 표시 |
-| source_tier | 1(정부원문·법령) / 2(연구보고서) / 3(뉴스) / 4(블로그) | 프롬프트의 신뢰도 구분 |
-| title, publisher, url, published_at(YYYY-MM-DD), published_year | | 출처 표기, 기간 필터 |
-| collected_at | | 수집 일시 기록 요건 |
-| dup_cluster_id | | 재배포 묶음 — gold 판정 시 같은 클러스터는 정답 인정 |
-| stance_hint (선택) | 찬/반/중립 | 종합 질문 분석용 (여유 시) |
-| chunk_idx, chunk_total, section | | 원문 위치 표시 |
+| [data_spec.md](data_spec.md) | 수집 원본·manifest, `docs.db`, doc_id 규칙, 청크 메타데이터, 평가셋·실험 결과 형식 | Day 1 초안, **Day 2 오전 확정** (doc_id·doc_type·청크 메타데이터는 이후 변경 금지) |
+| api_spec.md (작성 예정) — 외부 API | 네이버 검색·법령 Open API·열린국회정보 API의 호출 경로, 파라미터, 호출 한도, 사용 필드 | 각 API 키 발급 직후, 해당 수집기 구현 시 |
+| api_spec.md (작성 예정) — 내부 모듈 | `rag/retriever.py` 입출력 | Day 3 오전 (평가 하네스 구현 전) |
+| api_spec.md (작성 예정) — 내부 모듈 | `rag/chain.py` `build_chain(config)`, 인용·출처 형식, 거절 응답 형식 | Day 4 오전 (챗봇 UI 구현 전) |
 
-`docs.db` 테이블: `documents(doc_id PK, …메타, body_full)`, `dedup_log(doc_id, cluster_id, kept, reason, sim)`, `collect_log(url, status, collected_at, note)`
+- 핵심 결정 요약: doc_id = `{source}_{yyyymmdd}_{sha1(canonical_key)[:8]}`, 제공 뉴스는 네이버 oid·aid로 정규화하여 URL 형식 차이와 무관하게 불변 → 평가셋 gold_doc_ids 보존
 
 ---
 
@@ -170,13 +165,13 @@ mini-pjt-3-kevin/
 36,888건 ─▶ (a) 관련도 필터 ─▶ (b) 완전중복 제거 ─▶ (c) near-dup 클러스터링 ─▶ (d) 길이·보일러플레이트 ─▶ (e) 샘플링(필요 시)
 ```
 
-| 단계 | 기준 (Day 1 EDA 기반 잠정값) | 잔존 / 기록 |
+| 단계 | 기준 (Day 1 EDA 기반, 확정) | 잔존 / 기록 |
 |---|---|---|
 | (a) 관련도 | R4: 동의어(`지역화폐`·`지역사랑상품권`·`지역상품권`) 제목 포함 **또는** 본문 2회 이상이면서 1000자당 1회 이상 | 19,322 |
 | (b) 완전중복 | URL 동일, 정규화 본문 해시 동일 | 18,896 |
 | (c) near-dup | 문자 5-gram MinHash Jaccard ≥ **0.7** → 같은 클러스터, 대표 1건(최장 본문) 유지. 구간별 표본 판정 근거는 eda_findings §4 | 16,946 |
 | (d) 정제 | <200자 단신 제외, 꼬리말("기사 섹션 분류 안내"·제보·구독 안내)·저작권 문구 절단 | 16,760 |
-| (e) 샘플링 | D3 결정에 따름 (전량 또는 연도×매체 층화 샘플링) | 샘플링 전후 분포 비교 |
+| (e) 샘플링 | 미적용 (D3: 전량 사용) | 16,760 |
 
 주의: **관점이 다른 보도는 제거 대상에서 제외** — 반대 의견 기사까지 제거하면 "양측 근거 제시" 평가가 성립하지 않음. near-dup 임계값은 보수적으로.
 
@@ -186,14 +181,15 @@ mini-pjt-3-kevin/
 |---|---|---|---|---|---|
 | **P0** | 행안부 보도자료 (지역사랑상품권) | korea.kr 정책브리핑, 행안부 홈페이지 | 검색결과 목록 → 상세 HTML 크롤링 (딜레이 1~2s) | 100~200건 | 사실·시점 |
 | **P0** | 법령 원문 「지역사랑상품권 이용 활성화에 관한 법률」·시행령 | 국가법령정보센터 (Open API 우선) | API / 단건 | 2~5건 | 사실(제재 근거 등) |
-| **P0** | 개정 법안 + 상임위 검토보고서 | 열린국회정보 Open API (의안정보시스템은 robots.txt 전면 차단) | API 목록 조회 + 검토보고서 PDF 수동 다운로드 | 10~30건 | 쟁점·종합 |
-| **P1** | 정책·연구 보고서 (효과 평가 찬반) | 한국조세재정연구원, 한국지방행정연구원, 경기연구원, 국회예산정책처, NKIS (국회입법조사처는 robots.txt 전면 차단) | PDF 수동 다운로드 | 10~30건 | 종합·판단 (상충 근거) |
-| **P1** | 예산 자료 (연도별 국비) | 국회예산정책처 예산안 분석, 행안부 예산 보도자료 | PDF/HTML | 5~10건 | 시점 |
+| **P0** | 개정 법안 + 의안 관련 문서 | 열린국회정보 Open API (의안정보시스템은 robots.txt 전면 차단) | API 목록 조회 + 수동 확보 PDF 3건 (2024 재의요구서, 2024-09-19 본회의 회의록, 법사위 체계자구 검토보고) | API 목록 + 3건 | 쟁점·종합 |
+| **P1** | 정책·연구 보고서 (효과 평가 찬반) | 한국조세재정연구원, 한국지방행정연구원(정책브리프 2건·학술지 논문 1건), 경기연구원 | PDF 수동 다운로드 (확보 완료) | 5건 | 종합·판단 (상충 근거) |
+| **P1** | 예산 자료 (연도별 국비) | 국회예산정책처 2026년도 예산안 위원회별 분석 (지역사랑상품권 부분 22·112~118쪽), 행안부 예산 보도자료 | PDF 수동 다운로드 (확보 완료) + korea.kr 보도자료 | 1건 + 보도자료 | 시점 |
 | **P2** | 지자체 지역화폐 공고·안내 | 경기·서울·인천 등 3~5곳 | HTML | 10~30건 | 비교 |
 | **P2** | 블로그 (사용·구매 후기) | 네이버 검색 API (블로그) | API 요약문만 (blog.naver.com robots.txt가 RAG 목적 봇 접근 금지 명시 → 본문 수집 제외) | 200~500건 | 현장 반응 |
+| **P2** | 카페 (사용처·가맹점 관련 게시글) | 네이버 검색 API (카페) | API 요약문만 (cafe.naver.com robots.txt가 RAG 목적 봇 접근 금지 및 전면 차단 → 본문 수집 제외) | 200~500건 | 현장 반응 |
 
 소스별 robots.txt 판정과 API 발급 필요 항목은 [source_access.md](source_access.md)에 기록. 막히면 대체 소스로 바꾸고 경위를 기록(리포트 2항).
-수집 준수: 요청 간 딜레이, 병렬 대량 요청 금지, 로그인 데이터 금지, 모든 문서에 `url`·`collected_at` 기록 (`data/raw/manifest.jsonl`).
+수집 준수: 요청 간 딜레이, 병렬 대량 요청 금지, 로그인 데이터 금지, 모든 문서에 `url`·`collected_at` 기록 (`data/manifest.jsonl`).
 
 ### 5-3. 부족 자료 탐색 (Day 1 오후 ~ Day 2 오전)
 
@@ -282,15 +278,15 @@ mini-pjt-3-kevin/
 
 | Day | 오전 | 오후 | Gate (미달 시 범위 축소) |
 |---|---|---|---|
-| **1** 탐색·정의 | 환경 세팅(§9) · 주제/사용자/대표질문 확정(D1~D2) · `notebooks/eda.ipynb` (지역화폐 구성·기간·길이·매체·샘플 정독 20건) | 소스 접근성 확인표 → P0 크롤러(korea.kr) 착수 · 부족 자료 탐색 | EDA 수치 확보, 직접수집 소스 확정 |
-| **2** 수집·설계 | P0/P1 수집 마무리(백그라운드) · doc_id/메타 스키마 확정 · 임베딩 결정 | `load_provided`·`relevance`·`dedup` 구현 + 전후 건수 기록 · PDF 파싱 · 청킹 A/B 구현 · **평가셋 60문항 초안** | 평가셋 존재, KB 구성 확정 |
+| **1** 탐색·정의 | 환경 세팅(§9) · 주제/사용자/대표질문 확정(D1~D2) · `notebooks/eda.ipynb` (지역화폐 구성·기간·길이·매체·샘플 정독 20건) | 소스 접근성 확인표 · 부족 자료 탐색 · 데이터 명세 초안 | EDA 수치 확보, 직접수집 소스 확정 |
+| **2** 수집·설계 | data_spec 확정 · **직접 수집 일괄 진행** (korea.kr 크롤러, 법령·열린국회정보·네이버 API 수집기, 수동 다운로드 자료 등록 → 백그라운드 실행) · 임베딩 결정 | `load_provided`·`relevance`·`dedup` 구현 + 전후 건수 기록 · PDF 파싱 · 청킹 A/B 구현 · **평가셋 60문항 초안** | 평가셋 존재, KB 구성 확정 |
 | **3** 인덱싱·1차 측정 | 임베딩·적재 A안(백그라운드) → `verify.py` 검증 · 그 사이 `retriever.py`, `run_eval.py` | B안·no_title 적재 · E0/E1/E2 Hit@3 비교 → 청킹 선택 | **Hit@3 수치 제시 가능** |
 | **4** RAG·UI | `chain.py` + 프롬프트 + 인용 매핑 + 거절 로직 | Streamlit 챗·멀티턴·원문 보기·필터 | 챗봇이 출처와 함께 답변 |
 | **5** 평가·개선 | E0 전체 실행 → 60문항 **직접 채점** → 실패 계층 분류 | E3/E4 개선 + 재측정 · 대시보드 · (여유 시) E5 하이브리드 | **개선 전후 비교표 존재** |
 | **6** 정리 | 실패 사례 분석·한계 · 계층 분리 검증(인덱서 삭제 상태 구동) · `.env` 노출 점검 | 리포트 10항목 작성 · README 실행 순서 · 스크린샷 · 최종 체크리스트 | 신뢰성 판단을 수치로 설명 가능 |
 
 **병행 원칙:** 인덱싱·크롤링은 항상 백그라운드, 대기 시간에 평가셋/UI 작업.
-**범위 축소 순서 (일정 지연 시):** 블로그 → 지자체 공고 → 뉴스 샘플 수 축소(→3천건) → E5 확장 제외. **평가·개선은 축소 대상에서 제외**
+**범위 축소 순서 (일정 지연 시):** 블로그·카페 → 지자체 공고 → 뉴스 샘플 수 축소(→3천건) → E5 확장 제외. **평가·개선은 축소 대상에서 제외**
 
 ---
 
@@ -300,7 +296,7 @@ mini-pjt-3-kevin/
 |---|---|---|
 | Python | 3.14.10, 프로젝트 `.venv` 사용 | chromadb·langchain·kiwipiepy·streamlit·pymupdf 설치 및 동작 확인 완료. 버전은 `requirements.txt`에 고정 |
 | git | `C:\Program Files\Git\cmd\git.exe` 존재 | PowerShell 세션에 따라 PATH 미인식 사례 있음, Git Bash에서는 정상 동작 |
-| 데이터 용량 | 5개 그룹 합 1.3GB+ | `.gitignore`에 `/data/news_csv_5y` 등록 완료. `store/chroma/`, `data/raw/` 커밋 여부 결정(용량 고려, 재생성 스크립트 제공) |
+| 데이터 용량 | 5개 그룹 합 1.3GB+ | `data/news_csv_5y`, `data/raw/`, `data/interim/`, `store/`는 git 제외 (재생성 스크립트 제공). `data/manifest.jsonl`, `eval/results/`는 git 추적 (data_spec §1) |
 | API 키 | 공용 키 | `.env` + `.gitignore` 등록, `.env.example`만 커밋. 임베딩 비용·호출량 로그 남기기 |
 | HWP 문서 | 국회·정부 자료 일부 HWP 전용 | PDF 버전 우선, 불가 시 hwp5txt 등 변환 또는 제외 후 기록 |
 | 크롤링 차단 | 사이트별 상이 | 대체 소스 → 경위 기록 |
@@ -314,7 +310,7 @@ mini-pjt-3-kevin/
 | 가이드 요건 | 산출물 | Day |
 |---|---|---|
 | 계층 분리·독립 실행 | `collector/`, `indexer/`, `store/`, `rag/`, `app/` + README 실행 순서 | 2~4, 6 검증 |
-| 직접 수집 1차 자료 포함 | `data/raw/manifest.jsonl`, KB 구성 표 | 1~2 |
+| 직접 수집 1차 자료 포함 | `data/manifest.jsonl`, KB 구성 표 | 1~2 |
 | 청크 메타 (출처·제목·URL·발행일·종류) | §4-2 스키마, `verify.py` 출력 | 2~3 |
 | 벡터DB 영속화 | `store/chroma/` | 3 |
 | LangChain RAG 체인 | `rag/chain.py` | 4 |
@@ -339,8 +335,10 @@ mini-pjt-3-kevin/
 | 지역화폐 EDA (구성·기간·길이·매체·관련도·중복·보일러플레이트·표본 정독) | 완료 | `notebooks/eda.ipynb`, `docs/eda_findings.md` |
 | 직접 수집 소스 접근성 확인 | 완료 | `docs/source_access.md` |
 | 대표 질문별 근거 탐색 | 완료 | `docs/eda_findings.md` §6 |
-| P0 korea.kr 보도자료 크롤러 | 미착수 | `collector/crawl_korea_kr.py` |
-| API 키 발급 (네이버·법령·열린국회정보) | 사용자 조치 대기 | `.env` |
-| 보고서 PDF 수동 다운로드 (조세연·지방행정연·경기연·국회예산정책처) | 사용자 조치 대기 | `data/raw/reports/` |
+| D3 규모·관련도 필터(R4)·near-dup 임계값(0.7) 확정 | 완료 | §2, §5-1 |
+| 데이터 명세 초안 | 완료 (Day 2 오전 확정 예정) | `docs/data_spec.md` |
+| 직접 수집 (korea.kr 크롤러, API 수집기, 수동 자료 등록) | Day 2 자료 수집 단계에서 일괄 진행 | `collector/` |
+| API 키 발급 (네이버 API HUB·법령·열린국회정보·OpenAI) | 완료, 키별 1회 호출로 정상 응답 확인 | `.env` (git 제외) |
+| 수동 자료 다운로드 (PDF 10건: 연구보고서 5, 재의요구서·회의록·체계자구 검토보고, 법률 조문, 예산안 분석) | 완료 | `data/raw/reports/`, `data/manual_sources.csv` |
 
-**다음 작업 순서:** korea.kr 크롤러 구현·실행(백그라운드) → D3 규모 결정 → `collector/load_provided.py`·`indexer/relevance.py`·`indexer/dedup.py`로 EDA 잠정 기준 이식 → doc_id·메타 스키마 확정 → 평가셋 초안
+**다음 작업 순서 (Day 2):** data_spec 확정 → 직접 수집 일괄 진행 (수집기 구현·백그라운드 실행, data_spec §3 형식으로 저장) → `collector/load_provided.py`·`indexer/relevance.py`·`indexer/dedup.py`로 EDA 확정 기준 이식 → 평가셋 초안

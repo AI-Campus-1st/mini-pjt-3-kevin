@@ -20,17 +20,35 @@
 | P2 | 지자체 안내 | 서울 news.seoul.go.kr | `Allow: /` (`/files` 등 제외) | 가능 | 소수 페이지 수집 |
 | P2 | 지자체 안내 | 경기도 gg.go.kr | `/site/` 등 다수 경로 차단 | 경로별 확인 필요 | 수동 저장 |
 | P2 | 블로그 본문 | blog.naver.com | 주석으로 **AI 학습·RAG 목적 봇 접근 금지** 명시, GPTBot·ClaudeBot 등 전면 차단 | **본문 수집 불가** | 네이버 검색 API(블로그)의 제목·요약문·링크만 사용, 사유를 리포트에 기술 |
+| P2 | 카페 게시글 본문 | cafe.naver.com | 주석으로 **AI 학습·RAG 목적 봇 접근 금지** 명시, `User-agent: *` 포함 전면 `Disallow: /` | **본문 수집 불가** | 네이버 검색 API(카페)의 제목·요약문·링크만 사용, 사유를 리포트에 기술 |
 
 ## 2. 사용자 조치 필요 항목 (API 키 발급)
 
 | 항목 | 발급처 | 용도 | `.env` 키 |
 |---|---|---|---|
-| 네이버 검색 API | developers.naver.com 애플리케이션 등록 | 블로그 요약문 수집 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` |
+| 네이버 검색 API | NAVER Cloud Platform NAVER API HUB 애플리케이션 등록 (블로그·카페 선택) | 블로그·카페 요약문 수집 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` |
 | 법령 Open API | open.law.go.kr 신청 (OC 값) | 법령 원문 | `LAW_OPEN_API_OC` |
 | 열린국회정보 Open API | open.assembly.go.kr 인증키 신청 | 의안 목록 조회 | `ASSEMBLY_API_KEY` |
 | OpenAI | 교육 과정 제공 | 임베딩·생성 | `OPENAI_API_KEY` |
 
-- API 발급이 지연되면 법령·의안은 수동 다운로드로 대체 가능. 블로그는 P2이므로 최후순위
+- API 발급이 지연되면 법령·의안은 수동 다운로드로 대체 가능. 블로그·카페는 P2이므로 최후순위
+
+### 2-1. 네이버 검색 API 호출 한도
+
+| 항목 | 값 |
+|---|---|
+| 무료 제공량 | 월 최대 775,000건, 일 최대 25,000건 (검색 API 기준) |
+| 운용 원칙 | 무료 제공량을 상한으로 두고, 도달 시 수집 스크립트가 호출을 차단 (유료 과금 구간 진입 금지) |
+| 1회 호출당 최대 결과 | 100건 (`display=100`) |
+| 검색어 1개당 조회 상한 | 1,000건 (`start` 최대 1000) |
+| 예상 사용량 | 블로그·카페 각 검색어 10개 × 10페이지 = 약 200회 → 일 한도의 1% 미만 |
+
+- 실질 제약은 호출 한도보다 검색어당 1,000건 조회 상한 → 사용처·불편·지자체별 상품권명 등으로 검색어를 분할
+- 호출 방식 (NAVER API HUB 발급 키 기준, 2026-11-05 블로그·카페 각 1회 호출로 HTTP 200 확인)
+  - 엔드포인트: `https://naverapihub.apigw.ntruss.com/search/v1/{blog|cafearticle}`
+  - 인증 헤더: `X-NCP-APIGW-API-KEY-ID` (Client ID), `X-NCP-APIGW-API-KEY` (Client Secret)
+  - 기존 개발자센터 방식(`openapi.naver.com`, `X-Naver-Client-Id` 헤더)은 이 키로 401 인증 실패 → 사용 불가
+- 호출 횟수는 날짜별로 로그에 누적 기록하고, 일·월 누적치가 한도에 도달하면 이후 호출을 중단
 
 ## 3. 정책브리핑 사전 시험 결과
 
