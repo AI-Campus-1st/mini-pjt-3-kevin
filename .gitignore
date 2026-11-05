@@ -1,1 +1,16 @@
 /data/news_csv_5y
+
+# 비밀 정보
+.env
+
+# 가상환경·캐시
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# 재생성 가능한 대용량 산출물 (수집·인덱싱 스크립트로 재구축)
+/data/raw/
+/data/interim/
+/store/chroma/
+/store/docs.db
