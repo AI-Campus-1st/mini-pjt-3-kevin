@@ -1,7 +1,7 @@
 # 데이터 명세
 
 - 범위: 수집 원본 → 원문 DB(`store/docs.db`) → 벡터 DB(`store/chroma/`) → 평가셋·실험 결과까지 모든 저장 형식
-- 상태: 초안. git 추적 범위(§1), 제외 문서 보존(§4-1), 문서 종류 등급(§2-3), 제공 뉴스 수집 일시(§2-1)는 사용자 확인 완료. **§2 공통 규칙과 §5 청크 메타데이터는 Day 2 오전 확정 후 변경 금지**
+- 상태: **확정 (Day 2)**. 수집기·인덱서 구현 기준. **§2 공통 규칙과 §5 청크 메타데이터는 이후 변경 금지** (변경 시 전체 재인덱싱 + 평가셋 gold_doc_ids 재검증)
 - 관련 문서: [masterplan.md](masterplan.md) §4 아키텍처, [source_access.md](source_access.md) 수집 소스, [api_spec.md](api_spec.md) 모듈 인터페이스 (작성 예정)
 
 ---
@@ -12,11 +12,12 @@
 data/news_csv_5y/ (제공, 읽기 전용)
         │ collector/load_provided.py
         ▼
-data/raw/{source}/  +  data/manifest.jsonl  ◀── collector/crawl_*.py, 수동 다운로드
-        │ indexer (parse → clean → relevance → dedup)
+data/raw/news/provided_news.jsonl   data/raw/{source}/ + data/manifest.jsonl + data/raw/collect_log.jsonl
+                                     ◀── collector/crawl_*·collect_*·register_manual.py
+        │ python -m indexer docs (parse → clean → relevance → dedup)
         ▼
-store/docs.db  (원문 전체 + 메타데이터 + 처리 로그)
-        │ indexer (chunk → embed)
+store/docs.db  (원문 전체 + 구획 + 처리 로그 + 청크 텍스트)
+        │ python -m indexer chunk → embed
         ▼
 store/chroma/  (청크 + 임베딩 + 메타데이터)   store/bm25/ (하이브리드 검색 확장 시)
         │ rag/ (조회 전용)
@@ -209,7 +210,7 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `dup_cluster_id` | TEXT | near-dup 클러스터 ID (대표 문서의 doc_id) |
 | `is_representative` | INTEGER | 클러스터 대표 여부 (0/1) |
 | `included` | INTEGER | 지식베이스 포함 여부 (0/1) |
-| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `sampled_out` / `parse_error` |
+| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `empty_body` / `rank_cap` (검색어별 상위 N건 초과, 블로그 220건·카페 50건) / `parse_error` |
 | `raw_path` | TEXT | 직접 수집 문서의 원본 경로 |
 | `extra` | TEXT | JSON 문자열 (소스별 부가 정보: 의안번호, 법령 시행일 등) |
 
@@ -233,22 +234,40 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `id` | INTEGER PK | |
 | `source` | TEXT | |
 | `url` | TEXT | |
-| `status` | TEXT | `ok` / `skip_exists` / `skip_irrelevant` / `error` |
+| `status` | TEXT | `ok` / `skip` / `error` |
 | `http_status` | INTEGER | |
 | `collected_at` | TEXT | |
 | `message` | TEXT | 오류 내용 등 |
 
-### 4-4. `chunks` — 벡터 DB와 동일 청크의 텍스트 사본
+- 수집 계층은 원문 DB에 쓰지 않으므로 수집기는 `data/raw/collect_log.jsonl`에 기록하고, 인덱서가 이 테이블로 적재
+
+### 4-4. `sections` — 지식베이스 포함 문서의 구획 (청킹 입력)
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
-| `chunk_id` | TEXT PK | §5-1 |
+| `doc_id` | TEXT | |
+| `idx` | INTEGER | 구획 순번 |
+| `section` | TEXT | 법령 조문(`제20조(과태료)`), 제개정이유 등. 없으면 빈 문자열 |
+| `page` | INTEGER | PDF 원본 쪽 번호. 없으면 0 |
+| `text` | TEXT | 정제 후 구획 본문 |
+
+- `documents.body`는 구획 본문을 빈 줄로 이어 붙인 값
+
+### 4-5. `chunks` — 청크 텍스트 (임베딩 입력)
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| `chunk_id` | TEXT | §5-1 (`collection`과 함께 기본키) |
 | `collection` | TEXT | Chroma 컬렉션명 (청킹 설정별) |
 | `doc_id` | TEXT | |
 | `chunk_idx` | INTEGER | |
+| `chunk_total` | INTEGER | |
+| `section` | TEXT | 청크 시작 위치의 구획명 |
+| `page` | INTEGER | 청크 시작 위치의 PDF 쪽 |
 | `text` | TEXT | 임베딩 입력 텍스트 (prefix 포함) |
 | `char_len` | INTEGER | |
 
+- `python -m indexer chunk`가 생성하고 임베딩 단계가 읽어 Chroma에 적재
 - 용도: 청크 길이 분포 검증, BM25 인덱스 생성(하이브리드 검색 확장), 디버깅
 
 ---
@@ -313,9 +332,10 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `id` | str | O | `q001` 형식 |
 | `q` | str | O | 질문 |
 | `type` | str | O | `fact` / `compare` / `temporal` / `synthesis` / `unanswerable` / `multiturn` |
-| `gold_doc_ids` | list[str] | O | 정답 근거 문서. 답변 불가는 빈 리스트 |
+| `gold_doc_ids` | list[str] | △ | 정답 근거 문서. 답변 불가는 빈 리스트 |
+| `gold_patterns` | list[str] | △ | 정규식 목록. 모두 일치하는 지식베이스 문서를 정답으로 인정 (같은 사실을 다룬 뉴스가 수백 건인 문항용). `gold_doc_ids`와 둘 중 하나 이상 필수 (답변 불가 제외) |
 | `answer_key` | str | O | 모범 답안 요지 |
-| `required_points` | list[str] | | 채점 시 반드시 포함되어야 하는 사실 (수치·조항 등) |
+| `required_points` | list[str] | | 채점 시 반드시 포함되어야 하는 사실 (정규식). `eval/validate_set.py`가 gold 문서 본문에 존재하는지 검증 |
 | `source_need` | str | | 근거가 있어야 하는 문서 종류 (`press_release`, `law`, `report`, `news` 등) |
 | `filters` | object | | 질문에 함께 적용할 필터 (`year_from`, `year_to`, `doc_types`) |
 | `history` | list | | multiturn 문항의 이전 대화 `[{"role", "content"}]` |
@@ -329,7 +349,9 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 **정답 판정 규칙 (Hit@k)**
 - 검색 결과 청크를 doc_id 단위로 중복 제거한 후 순위 산정
 - 검색된 doc_id가 `gold_doc_ids`에 있거나, gold 문서와 같은 `dup_cluster_id`이면 적중
+- `gold_patterns`가 있으면 검색된 문서의 제목+본문이 모든 정규식과 일치할 때도 적중
 - gold 문서가 dedup으로 제외된 경우 해당 클러스터 대표 문서를 정답으로 간주
+- 초안은 `eval/eval_set_draft.jsonl`, 검토 시트는 `eval/eval_review.csv`(Excel 호환 UTF-8 BOM), 사용자 검토 후 확정본을 `eval/eval_set.jsonl`로 저장
 
 ---
 
