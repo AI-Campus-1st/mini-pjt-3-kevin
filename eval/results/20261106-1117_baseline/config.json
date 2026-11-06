@@ -1,0 +1,19 @@
+{
+ "tag": "baseline",
+ "changed_variable": "기준 (청킹 A, 제목 prefix O, 3-small, top_k=5)",
+ "collection": "kb_A_te3s",
+ "embedding_model": "text-embedding-3-small",
+ "chunk_config": "A",
+ "title_prefix": true,
+ "top_k": 5,
+ "fetch_k": 50,
+ "mrr_cutoff": 10,
+ "score_threshold": null,
+ "prompt_version": null,
+ "llm_model": null,
+ "temperature": null,
+ "eval_set": "eval_set.jsonl",
+ "eval_set_sha1": "58e3c1afb6554cfc7f368bf2838d7ec93638a6a6",
+ "mode": "retrieval_only",
+ "run_at": "2026-11-06T11:17:24+09:00"
+}

@@ -351,7 +351,7 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 - 검색된 doc_id가 `gold_doc_ids`에 있거나, gold 문서와 같은 `dup_cluster_id`이면 적중
 - `gold_patterns`가 있으면 검색된 문서의 제목+본문이 모든 정규식과 일치할 때도 적중
 - gold 문서가 dedup으로 제외된 경우 해당 클러스터 대표 문서를 정답으로 간주
-- 초안은 `eval/eval_set_draft.jsonl`, 검토 시트는 `eval/eval_review.csv`(Excel 호환 UTF-8 BOM), 사용자 검토 후 확정본을 `eval/eval_set.jsonl`로 저장
+- 초안은 `eval/eval_set_draft.jsonl`, 검토 시트는 `eval/eval_review.csv`(Excel 저장 후 CP949 탭 구분, 열 이름으로 읽음), 사용자 검토 후 확정본을 `eval/eval_set.jsonl`로 저장
 
 ---
 

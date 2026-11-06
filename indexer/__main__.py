@@ -5,13 +5,14 @@
     python -m indexer docs                      # 원문 DB 구축 (파싱·정제·관련도·중복)
     python -m indexer chunk --preset A          # 청킹 설정 A (제목 prefix 포함)
     python -m indexer chunk --preset A --no-title
+    python -m indexer embed --preset A          # 임베딩·Chroma 적재 (중단 시 재실행하면 이어서 적재)
     python -m indexer verify
 """
 import argparse
 import json
 import time
 
-from indexer import build_docs, chunk, verify
+from indexer import build_docs, chunk, embed, verify
 
 
 def main():
@@ -21,6 +22,9 @@ def main():
     c = sub.add_parser('chunk')
     c.add_argument('--preset', required=True, choices=['A', 'B'])
     c.add_argument('--no-title', action='store_true')
+    e = sub.add_parser('embed')
+    e.add_argument('--preset', required=True, choices=['A', 'B'])
+    e.add_argument('--no-title', action='store_true')
     v = sub.add_parser('verify')
     v.add_argument('--collection')
     args = p.parse_args()
@@ -30,6 +34,8 @@ def main():
         result = build_docs.run()
     elif args.cmd == 'chunk':
         result = chunk.run(args.preset, title_prefix=not args.no_title)
+    elif args.cmd == 'embed':
+        result = embed.run(args.preset, title_prefix=not args.no_title)
     else:
         result = verify.run(args.collection)
     print(json.dumps(result, ensure_ascii=False, indent=1))
