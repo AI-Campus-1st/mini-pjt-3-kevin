@@ -149,9 +149,9 @@ mini-pjt-3-kevin/
 | 문서 | 범위 | 작성·확정 시점 |
 |---|---|---|
 | [data_spec.md](data_spec.md) | 수집 원본·manifest, `docs.db`, doc_id 규칙, 청크 메타데이터, 평가셋·실험 결과 형식 | Day 1 초안, **Day 2 오전 확정** (doc_id·doc_type·청크 메타데이터는 이후 변경 금지) |
-| api_spec.md (작성 예정) — 외부 API | 네이버 검색·법령 Open API·열린국회정보 API의 호출 경로, 파라미터, 호출 한도, 사용 필드 | 각 API 키 발급 직후, 해당 수집기 구현 시 |
+| [api_spec.md](api_spec.md) §1 — 외부 API | 네이버 검색·법령 Open API·열린국회정보·OpenAI API의 호출 경로, 파라미터, 호출 한도, 사용 필드 | 확정 (Day 2 수집 기준, Day 4 문서화) |
 | [api_spec.md](api_spec.md) §2·§3 — 내부 모듈 | `rag/retriever.py` 입출력, `eval/run_eval.py` 지표 정의 | 확정 (Day 3) |
-| api_spec.md (작성 예정) — 내부 모듈 | `rag/chain.py` `build_chain(config)`, 인용·출처 형식, 거절 응답 형식 | Day 4 오전 (챗봇 UI 구현 전) |
+| [api_spec.md](api_spec.md) §4 — 내부 모듈 | `rag/chain.py` `build_chain(cfg)`, 인용·출처 형식, 거절 응답 형식 | 확정 (Day 4) |
 
 - 핵심 결정 요약: doc_id = `{source}_{yyyymmdd}_{sha1(canonical_key)[:8]}`, 제공 뉴스는 네이버 oid·aid로 정규화하여 URL 형식 차이와 무관하게 불변 → 평가셋 gold_doc_ids 보존
 

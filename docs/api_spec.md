@@ -1,11 +1,11 @@
 # 인터페이스 명세
 
-- 범위: 내부 모듈(`rag/`)의 입출력, 평가 하네스 호출 방식, RAG 체인의 인용·출처·거절 형식
-- 관련 문서: [masterplan.md](masterplan.md) §4 아키텍처, [data_spec.md](data_spec.md) 저장 형식
+- 범위: 외부 API 호출 방식, 내부 모듈(`rag/`)의 입출력, 평가 하네스 호출 방식, RAG 체인의 인용·출처·거절 형식
+- 관련 문서: [masterplan.md](masterplan.md) §4 아키텍처, [data_spec.md](data_spec.md) 저장 형식, [source_access.md](source_access.md) 소스별 접근성 판정
 
 | 절 | 대상 | 상태 |
 |---|---|---|
-| §1 | 외부 API (네이버 검색·법령 Open API·열린국회정보) | 미작성 (수집기 코드 `collector/collect_*.py`가 현재 기준) |
+| §1 | 외부 API (네이버 검색·법령 Open API·열린국회정보·OpenAI) | 확정 (Day 2 수집 기준, Day 4 문서화) |
 | §2 | `rag/retriever.py` | 확정 (Day 3) |
 | §3 | `eval/run_eval.py` | 확정 (Day 3, retrieval-only 모드) |
 | §4 | `rag/chain.py` `build_chain(cfg)`, `rag/docstore.py` | 확정 (Day 4) |
@@ -14,7 +14,74 @@
 
 ## 1. 외부 API
 
-- 미작성
+### 1-0. 공통
+
+| 항목 | 내용 |
+|---|---|
+| 인증 정보 | `.env`에만 저장 (git 제외), 키 이름은 `.env.example` |
+| HTTP 세션 | `collector.storage.PoliteSession`: 요청 간 최소 지연 강제, 병렬 요청 없음, timeout 30s, User-Agent `config.USER_AGENT` |
+| 기록 | 문서별 출처·수집 일시는 `data/manifest.jsonl`, 호출 결과는 `data/raw/collect_log.jsonl` (data_spec §3·§4-3) |
+| 원본 저장 | API 응답 JSON 그대로 `data/raw/{source}/`에 저장 후 인덱서가 파싱 |
+| 실행 | `python -m collector law`, `python -m collector assembly`, `python -m collector naver` (또는 `all`) |
+
+| API | `.env` 키 | 수집기 | 요청 지연 | Day 2 수집 결과 |
+|---|---|---|---:|---|
+| 네이버 검색 (NAVER API HUB) | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | `collector/collect_naver.py` | 0.3s | 200회 호출, 블로그·카페 요약문 13,357건 (지식베이스 포함 1,046건) |
+| 국가법령정보 공동활용 | `LAW_OPEN_API_OC` | `collector/collect_law.py` | 1.5s | 법률·시행령·시행규칙 3건 |
+| 열린국회정보 | `ASSEMBLY_API_KEY` | `collector/collect_assembly.py` | 1.0s | 제21대 14건·제22대 26건 의안 목록 → 문서 2건 |
+| OpenAI | `OPENAI_API_KEY` | `indexer/embed.py`, `rag/` | TPM 기준 조절 | 임베딩 69,636,257 토큰 (Day 3) |
+
+### 1-1. 네이버 검색 API (블로그·카페)
+
+| 항목 | 내용 |
+|---|---|
+| 엔드포인트 | `GET https://naverapihub.apigw.ntruss.com/search/v1/{blog\|cafearticle}` (`config.NAVER_ENDPOINT`) |
+| 인증 헤더 | `X-NCP-APIGW-API-KEY-ID` (Client ID), `X-NCP-APIGW-API-KEY` (Client Secret). 개발자센터 방식(`openapi.naver.com`, `X-Naver-Client-Id`)은 이 키로 401 |
+| 파라미터 | `query` (검색어, `config.NAVER_QUERIES` 10개), `display=100`, `start=1,101,...,901`, `sort=sim` (정확도순) |
+| 호출 한도 | 무료 제공량 일 25,000건·월 775,000건. 날짜별 누적 호출 수를 `data/raw/naver/quota.json`에 기록하고 `config.NAVER_DAILY_LIMIT` 도달 시 중단 (유료 구간 진입 금지) |
+| 조회 상한 | 검색어당 `start + display ≤ 1,000` → 검색어 분할로 대응 |
+| 페이지 종료 | 응답 `items`가 `display`보다 적으면 해당 검색어 종료 |
+| 사용 필드 (블로그) | `title`, `link`, `description`, `bloggername`, `postdate` (`YYYYMMDD`) |
+| 사용 필드 (카페) | `title`, `link`, `description`, `cafename` (게시일 필드 없음 → `published_at` 빈 문자열) |
+| 변환 | `title`·`description`의 HTML 태그 제거 및 엔티티 복원. 본문은 `description`(요약문)만 사용 |
+| 문서 키 | `canonical_key = {blog\|cafe}:{link}`, `publisher` = 블로그명·카페명 |
+| 제약 | blog.naver.com·cafe.naver.com robots.txt가 RAG 목적 봇 접근 금지 → 링크 본문 수집 금지, API 응답만 사용 |
+
+### 1-2. 국가법령정보 공동활용 Open API
+
+| 항목 | 내용 |
+|---|---|
+| 목록 조회 | `GET https://www.law.go.kr/DRF/lawSearch.do` 파라미터 `OC`, `target=law`, `type=JSON`, `query=지역사랑상품권` (`config.LAW_QUERY`) |
+| 목록 사용 필드 | `LawSearch.law[]`의 `법령일련번호`(MST), `법령명한글`, `공포일자`, `시행일자`, `법령구분명`. 결과가 1건이면 리스트가 아닌 객체로 오므로 리스트로 변환 |
+| 본문 조회 | `GET https://www.law.go.kr/DRF/lawService.do` 파라미터 `OC`, `target=law`, `type=JSON`, `MST={법령일련번호}` |
+| 본문 사용 필드 | `법령.조문.조문단위[]` 중 `조문여부 = 조문`인 항목의 `조문번호`·`조문제목`·`조문내용`·`항[].항내용`·`항[].호[].호내용` → 조문 단위 구획, `법령.제개정이유.제개정이유내용` → 별도 구획 |
+| 문서 키 | `canonical_key = law:{법령일련번호}`, `published_at` = 공포일자, 시행일자는 `note`에 기록 |
+| 공개 URL | 응답의 상세 링크에 OC 값이 포함되므로 manifest에는 `https://www.law.go.kr/법령/{법령명(공백 제거)}`만 기록 |
+| 호출 한도 | 별도 한도 미확인. 법령 3건 기준 목록 1회 + 본문 3회 호출 |
+
+### 1-3. 열린국회정보 Open API (국회의원 발의법률안)
+
+| 항목 | 내용 |
+|---|---|
+| 엔드포인트 | `GET https://open.assembly.go.kr/portal/openapi/nzmimeepazxkubdpn` (`config.ASSEMBLY_SERVICE`) |
+| 파라미터 | `KEY`, `Type=json`, `pIndex` (1부터), `pSize=100`, `AGE` (대수, `config.ASSEMBLY_AGES` = 21, 22), `BILL_NAME=지역사랑상품권` |
+| 응답 구조 | `{서비스코드: [{"head": [{"list_total_count"}, ...]}, {"row": [...]}]}`. 서비스코드 키가 리스트가 아니면(결과 없음·오류 응답) 수집 종료 |
+| 페이지 종료 | 누적 행 수가 `list_total_count` 이상이면 종료 |
+| 사용 필드 | `BILL_NO`, `BILL_NAME`, `PROPOSE_DT`, `PROPOSER`, `RST_PROPOSER`, `COMMITTEE`, `PROC_RESULT`, `PROC_DT` |
+| 문서 구성 | 대수별 의안 목록을 문서 1건으로 저장 (의안 행은 제목이 동일하여 단독 문서로는 변별력 없음), 의안별 한 줄 요약을 발의일 순으로 나열 |
+| 문서 키 | `canonical_key = assembly:bills:{AGE}:{BILL_NAME}`, `published_at` = 최신 발의일, `citation`에 API명·조회일 기록 |
+| 제약 | 의안정보시스템(likms.assembly.go.kr)은 robots.txt 전면 차단 → 법안 원문·검토보고서는 수동 다운로드 (data_spec §3-3) |
+
+### 1-4. OpenAI API
+
+| 용도 | 호출 | 설정 | 비고 |
+|---|---|---|---|
+| 문서 임베딩 | `embeddings.create` | `config.EMBEDDING_MODEL` (`text-embedding-3-small`, 1,536차원) | 요청당 최대 100,000 토큰·1,000건 배치, 3개 스레드, 최근 60초 사용량을 TPM 한도(1,000,000)의 90% 이하로 유지, 오류 시 지수 백오프 6회. 호출 기록 `data/interim/embed_log.jsonl` |
+| 쿼리 임베딩 | `embeddings.create` | 컬렉션 메타데이터 `embedding_model` | `rag/retriever.py`, 프로세스 내 캐시 |
+| 답변 생성 | LangChain `ChatOpenAI` (스트리밍) | `config.LLM_MODEL` (`gpt-6-luna`), `reasoning_effort` 기본값 | temperature는 기본값(1)만 지원 → 인자 생략 |
+| 질의 재작성 | LangChain `ChatOpenAI` | 같은 모델, `reasoning_effort=low` | 대화 이력이 있을 때만 호출 |
+
+- 계정 한도 (2026-11-06 응답 헤더 기준): 임베딩 요청 5,000 RPM, 1,000,000 TPM
 
 ---
 

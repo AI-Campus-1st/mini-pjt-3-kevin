@@ -2,7 +2,7 @@
 
 - 범위: 수집 원본 → 원문 DB(`store/docs.db`) → 벡터 DB(`store/chroma/`) → 평가셋·실험 결과까지 모든 저장 형식
 - 상태: **확정 (Day 2)**. 수집기·인덱서 구현 기준. **§2 공통 규칙과 §5 청크 메타데이터는 이후 변경 금지** (변경 시 전체 재인덱싱 + 평가셋 gold_doc_ids 재검증)
-- 관련 문서: [masterplan.md](masterplan.md) §4 아키텍처, [source_access.md](source_access.md) 수집 소스, [api_spec.md](api_spec.md) 모듈 인터페이스 (작성 예정)
+- 관련 문서: [masterplan.md](masterplan.md) §4 아키텍처, [source_access.md](source_access.md) 수집 소스, [api_spec.md](api_spec.md) 외부 API·모듈 인터페이스
 
 ---
 
