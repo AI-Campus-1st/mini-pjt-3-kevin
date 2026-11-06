@@ -75,6 +75,12 @@ MIN_BODY_LEN = 200
 # 지식베이스에서 제외하는 문서 종류 (수집은 유지, 인덱싱 단계에서 exclude_reason = type_excluded)
 # cafe: 네이버 카페 검색 API가 게시일을 제공하지 않아 발행일 기록 요건(가이드 7장) 미충족 (Day 4 사용자 결정)
 KB_EXCLUDE_TYPES = {'cafe'}
+# 지식베이스에서 제외하는 블로그 (네이버 블로그 ID, 인덱싱 단계에서 exclude_reason = blog_excluded)
+# 동일 제목 틀에 지자체명만 바꿔 반복 게시한 양산형 블로그 (eda_findings §7, 블로그 품질 점검 S4 사용자 결정)
+KB_EXCLUDE_BLOGS = {
+    '4baygood',    # 로얄층RR: 'OO시 지역화폐 OO사랑상품권 발급 및 사용방법' 틀 14건
+    'godstill12',  # 투헤븐의 닥치고경제: 'OO 지역화폐 할인 구매 한도 및 발행 일정 (2026년 9월 기준)' 틀 5건
+}
 
 # 문서 종류 → 신뢰도 등급 (data_spec §2-3)
 DOC_TYPE_TIER = {

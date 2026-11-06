@@ -6,6 +6,7 @@
 - 매 실행 시 docs.db를 새로 생성 (재현성)
 """
 import json
+import re
 import sqlite3
 from collections import Counter, defaultdict
 
@@ -46,6 +47,12 @@ CREATE INDEX idx_chunks_coll ON chunks(collection);
 
 NEWS_PATH = config.RAW_DIR / 'news' / 'provided_news.jsonl'
 URL_UNIQUE_TYPES = {'news', 'press_release', 'blog', 'cafe'}
+
+
+def blog_id(url: str) -> str:
+    """네이버 블로그 URL에서 블로그 ID 추출 (blog.naver.com/{id}/{글번호})"""
+    m = re.search(r'blog\.naver\.com/([^/?#]+)', url or '')
+    return m.group(1) if m else ''
 
 
 def read_jsonl(path):
@@ -98,6 +105,9 @@ def run() -> dict:
         d.update(included=0, exclude_reason='', dup_cluster_id=d['doc_id'], is_representative=1)
         if t in config.KB_EXCLUDE_TYPES:
             d['exclude_reason'] = 'type_excluded'
+            continue
+        if t == 'blog' and blog_id(d['url']) in config.KB_EXCLUDE_BLOGS:
+            d['exclude_reason'] = 'blog_excluded'
             continue
         if d['extra'].get('parse_error'):
             d['exclude_reason'] = 'parse_error'

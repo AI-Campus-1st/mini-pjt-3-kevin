@@ -63,7 +63,7 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 |---|---|---|
 | `news` | 제공 뉴스 (네이버 뉴스 URL) | news |
 | `korea_kr` | 대한민국 정책브리핑 | press_release |
-| `mois` | 행정안전부 누리집 | press_release |
+| `mois` | 행정안전부 누리집 | press_release, guideline |
 | `law` | 국가법령정보센터 | law |
 | `assembly` | 열린국회정보·의안정보시스템 | bill, review_report |
 | `nabo` | 국회예산정책처 | budget, report |
@@ -95,7 +95,7 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 | `veto` | 재의요구서 | 2 | 대통령 재의요구서 (공식 문서이나 내용은 거부 사유라는 정부 의견) |
 | `report` | 연구보고서 | 2 | 국책·지자체 연구기관 보고서 |
 | `news` | 뉴스 | 3 | 언론 보도 |
-| `blog` | 블로그 | 4 | 이용자 작성 글 (요약문) |
+| `blog` | 블로그 | 4 | 이용자 작성 글 (요약문). 양산형 블로그는 지식베이스에서 제외 (`blog_excluded`) |
 | `cafe` | 카페글 | 4 | 커뮤니티 게시글 (요약문). 게시일 미제공으로 지식베이스에서 제외 |
 
 - 등급 의미: 1 정부·국회 공식 원문 (제도·사실의 근거) / 2 공식 기관의 분석 의견 / 3 언론 보도 / 4 개인 의견
@@ -214,7 +214,7 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `dup_cluster_id` | TEXT | near-dup 클러스터 ID (대표 문서의 doc_id) |
 | `is_representative` | INTEGER | 클러스터 대표 여부 (0/1) |
 | `included` | INTEGER | 지식베이스 포함 여부 (0/1) |
-| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `empty_body` / `rank_cap` (검색어별 상위 N건 초과, 블로그 220건·카페 50건) / `parse_error` / `type_excluded` (`config.KB_EXCLUDE_TYPES`에 지정된 문서 종류, 현재 cafe) |
+| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `empty_body` / `rank_cap` (검색어별 상위 N건 초과, 블로그 220건·카페 50건) / `parse_error` / `type_excluded` (`config.KB_EXCLUDE_TYPES`에 지정된 문서 종류, 현재 cafe) / `blog_excluded` (`config.KB_EXCLUDE_BLOGS`에 지정된 양산형 블로그, eda_findings §7-5) |
 | `raw_path` | TEXT | 직접 수집 문서의 원본 경로 |
 | `extra` | TEXT | JSON 문자열 (소스별 부가 정보: 의안번호, 법령 시행일 등) |
 

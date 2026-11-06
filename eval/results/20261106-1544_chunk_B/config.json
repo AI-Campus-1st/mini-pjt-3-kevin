@@ -1,0 +1,21 @@
+{
+ "tag": "chunk_B",
+ "changed_variable": "청킹 B",
+ "collection": "kb_B_te3s",
+ "embedding_model": "text-embedding-3-small",
+ "chunk_config": "B",
+ "title_prefix": true,
+ "n_docs": 18249,
+ "n_chunks": 30600,
+ "top_k": 5,
+ "fetch_k": 50,
+ "mrr_cutoff": 10,
+ "score_threshold": null,
+ "prompt_version": null,
+ "llm_model": null,
+ "temperature": null,
+ "eval_set": "eval_set.jsonl",
+ "eval_set_sha1": "7da96cee1555a80a0d233ec3093481d20459992f",
+ "mode": "retrieval_only",
+ "run_at": "2026-11-06T15:44:25+09:00"
+}
