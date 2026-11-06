@@ -98,10 +98,24 @@ EMBEDDING_ALIAS = {'text-embedding-3-small': 'te3s', 'text-embedding-3-large': '
 LLM_MODEL = os.getenv('LLM_MODEL', 'gpt-6-luna')
 # gpt-6-luna는 temperature 기본값(1)만 지원 → None이면 호출 시 인자 생략
 LLM_TEMPERATURE = None
+# 추론 강도: None이면 모델 기본값 사용 (Day 4 결정), 질의 재작성은 속도 우선 low
+LLM_REASONING_EFFORT = None
+REWRITE_REASONING_EFFORT = 'low'
 TOP_K = 5
+# 유사도 임계값: None이면 미적용 (E0 baseline 정의, E3에서 값 결정)
+SCORE_THRESHOLD = None
+PROMPT_VERSION = 'v1'
+# 생성 단계에 전달하는 이전 대화 턴 수, 이전 답변 최대 길이
+HISTORY_TURNS = 3
+HISTORY_ANSWER_MAX_CHARS = 800
+# 답변 품질 평가 시 문항당 생성 횟수 (temperature 고정 불가 대응, 다수결 판정)
+EVAL_GENERATIONS = 3
 
 
 def collection_name(chunk_config: str, title_prefix: bool = True, model: str = EMBEDDING_MODEL) -> str:
     """Chroma 컬렉션명 규칙 (data_spec §5-1)"""
     name = f'kb_{chunk_config}_{EMBEDDING_ALIAS.get(model, "emb")}'
     return name if title_prefix else f'{name}_notitle'
+
+
+DEFAULT_COLLECTION = collection_name('A', True)
