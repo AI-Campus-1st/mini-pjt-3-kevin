@@ -2,6 +2,7 @@
 청크 임베딩·Chroma 적재 (data_spec §5)
 - docs.db chunks 테이블의 컬렉션별 청크를 OpenAI 임베딩으로 변환하여 store/chroma/에 적재
 - 재실행 시 이미 적재된 chunk_id는 건너뜀 (중단 후 재개 가능)
+- chunks 테이블에 없는 chunk_id는 Chroma에서 삭제 (문서 제외 시 재임베딩 없이 동기화)
 - 분당 토큰 한도(TPM) 안에서 호출하도록 최근 60초 사용량 기준으로 대기, 오류 시 지수 백오프 재시도
 - 호출별 토큰 사용량은 data/interim/embed_log.jsonl에 기록 (비용·호출량 추적)
 """
@@ -126,7 +127,11 @@ def run(preset: str, title_prefix: bool = True, model: str = config.EMBEDDING_MO
         metadata={'hnsw:space': 'cosine', 'embedding_model': model, 'chunk_config': preset,
                   'title_prefix': title_prefix, 'built_at': now_kst(),
                   'n_docs': len({r['doc_id'] for r in rows}), 'n_chunks': len(rows)})
-    done = set(coll.get(include=[])['ids'])
+    stored = set(coll.get(include=[])['ids'])
+    stale = sorted(stored - {r['chunk_id'] for r in rows})
+    for i in range(0, len(stale), 5000):
+        coll.delete(ids=stale[i:i + 5000])
+    done = stored - set(stale)
     todo = [r for r in rows if r['chunk_id'] not in done]
     enc = tiktoken.get_encoding('cl100k_base')
     batches = make_batches(todo, enc)
@@ -153,5 +158,12 @@ def run(preset: str, title_prefix: bool = True, model: str = config.EMBEDDING_MO
             el = time.time() - t0
             print(f'  {added}/{len(todo)} 청크, {used_tokens:,} 토큰, {el:.0f}s', flush=True)
 
-    return {'collection': coll_name, 'chunks_total': len(rows), 'added': added, 'already': len(done),
+    # 컬렉션 메타데이터 갱신 (Chroma는 생성 후 hnsw:space 변경을 거부하므로 해당 키는 제외하고 갱신, 거리 함수는 configuration에 유지)
+    meta = {k: v for k, v in (coll.metadata or {}).items() if k != 'hnsw:space'}
+    n_docs, n_chunks = len({r['doc_id'] for r in rows}), len(rows)
+    if (stale or added) and (meta.get('n_docs'), meta.get('n_chunks')) != (n_docs, n_chunks):
+        meta.update({'n_docs': n_docs, 'n_chunks': n_chunks, 'synced_at': now_kst()})
+        coll.modify(metadata=meta)
+    return {'collection': coll_name, 'chunks_total': len(rows), 'added': added, 'deleted': len(stale),
+            'already': len(done),
             'chroma_count': coll.count(), 'tokens': used_tokens, 'elapsed_sec': round(time.time() - t0, 1)}

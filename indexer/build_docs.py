@@ -96,6 +96,9 @@ def run() -> dict:
         t = d['doc_type']
         funnel[t]['0_candidates'] += 1
         d.update(included=0, exclude_reason='', dup_cluster_id=d['doc_id'], is_representative=1)
+        if t in config.KB_EXCLUDE_TYPES:
+            d['exclude_reason'] = 'type_excluded'
+            continue
         if d['extra'].get('parse_error'):
             d['exclude_reason'] = 'parse_error'
             continue

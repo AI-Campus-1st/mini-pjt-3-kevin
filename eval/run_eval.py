@@ -154,7 +154,8 @@ def main():
     info = retriever.info
     cfg = {'tag': a.tag, 'changed_variable': a.changed_variable, 'collection': a.collection,
            'embedding_model': info.get('embedding_model'), 'chunk_config': info.get('chunk_config'),
-           'title_prefix': info.get('title_prefix'), 'top_k': a.top_k, 'fetch_k': FETCH_K, 'mrr_cutoff': MRR_CUTOFF,
+           'title_prefix': info.get('title_prefix'), 'n_docs': info.get('n_docs'), 'n_chunks': info.get('n_chunks'),
+           'top_k': a.top_k, 'fetch_k': FETCH_K, 'mrr_cutoff': MRR_CUTOFF,
            'score_threshold': None, 'prompt_version': None, 'llm_model': None, 'temperature': None,
            'eval_set': Path(a.eval_set).name,
            'eval_set_sha1': hashlib.sha1(Path(a.eval_set).read_bytes()).hexdigest(),

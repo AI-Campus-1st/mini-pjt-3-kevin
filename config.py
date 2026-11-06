@@ -72,17 +72,20 @@ NEARDUP_THRESHOLD = 0.7
 MINHASH_NUM_PERM = 64
 MINHASH_SHINGLE = 5
 MIN_BODY_LEN = 200
+# 지식베이스에서 제외하는 문서 종류 (수집은 유지, 인덱싱 단계에서 exclude_reason = type_excluded)
+# cafe: 네이버 카페 검색 API가 게시일을 제공하지 않아 발행일 기록 요건(가이드 7장) 미충족 (Day 4 사용자 결정)
+KB_EXCLUDE_TYPES = {'cafe'}
 
 # 문서 종류 → 신뢰도 등급 (data_spec §2-3)
 DOC_TYPE_TIER = {
-    'press_release': 1, 'law': 1, 'bill': 1, 'budget': 1, 'local_notice': 1,
+    'press_release': 1, 'law': 1, 'bill': 1, 'budget': 1, 'local_notice': 1, 'guideline': 1,
     'review_report': 2, 'minutes': 2, 'veto': 2, 'report': 2,
     'news': 3,
     'blog': 4, 'cafe': 4,
 }
 DOC_TYPE_LABEL = {
     'press_release': '보도자료', 'law': '법령', 'bill': '의안', 'budget': '예산자료',
-    'local_notice': '지자체공고', 'review_report': '검토보고서', 'minutes': '회의록',
+    'local_notice': '지자체공고', 'guideline': '업무지침', 'review_report': '검토보고서', 'minutes': '회의록',
     'veto': '재의요구서', 'report': '연구보고서', 'news': '뉴스', 'blog': '블로그', 'cafe': '카페글',
 }
 

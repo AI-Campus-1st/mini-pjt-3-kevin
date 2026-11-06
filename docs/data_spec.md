@@ -71,9 +71,12 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 | `krila` | 한국지방행정연구원 | report |
 | `ggri` | 경기연구원 | report |
 | `nkis` | 국가정책연구포털 | report |
+| `nars` | 국회입법조사처 | report |
+| `moef` | 기획재정부·열린재정 | budget |
+| `localri` | 시도 연구원 (경기연구원 제외) | report |
 | `localgov` | 지자체 누리집 | local_notice |
 | `blog` | 네이버 검색 API (블로그 요약문) | blog |
-| `cafe` | 네이버 검색 API (카페 게시글 요약문) | cafe |
+| `cafe` | 네이버 검색 API (카페 게시글 요약문) | cafe (지식베이스 제외, §4-1 `type_excluded`) |
 
 - 소스 추가 시 이 표에 먼저 등록
 
@@ -86,13 +89,14 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 | `bill` | 의안 | 1 | 법률안 원문, 제안 이유 |
 | `budget` | 예산자료 | 1 | 예산안·결산 관련 공식 자료 |
 | `local_notice` | 지자체공고 | 1 | 지자체 사업 공고·안내 |
+| `guideline` | 업무지침 | 1 | 부처 업무지침·운영지침 (제도 운영 기준 원문) |
 | `review_report` | 검토보고서 | 2 | 국회 상임위 전문위원 검토보고서 (법안에 대한 분석 의견) |
 | `minutes` | 회의록 | 2 | 국회 회의록 (공식 기록이나 내용 대부분이 의원 발언·토론) |
 | `veto` | 재의요구서 | 2 | 대통령 재의요구서 (공식 문서이나 내용은 거부 사유라는 정부 의견) |
 | `report` | 연구보고서 | 2 | 국책·지자체 연구기관 보고서 |
 | `news` | 뉴스 | 3 | 언론 보도 |
 | `blog` | 블로그 | 4 | 이용자 작성 글 (요약문) |
-| `cafe` | 카페글 | 4 | 커뮤니티 게시글 (요약문) |
+| `cafe` | 카페글 | 4 | 커뮤니티 게시글 (요약문). 게시일 미제공으로 지식베이스에서 제외 |
 
 - 등급 의미: 1 정부·국회 공식 원문 (제도·사실의 근거) / 2 공식 기관의 분석 의견 / 3 언론 보도 / 4 개인 의견
 - 검토보고서는 국회 공식 문서이나 법안의 사실 내용이 아닌 전문위원의 분석 의견이므로 연구보고서와 같은 등급 2로 분류
@@ -210,7 +214,7 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `dup_cluster_id` | TEXT | near-dup 클러스터 ID (대표 문서의 doc_id) |
 | `is_representative` | INTEGER | 클러스터 대표 여부 (0/1) |
 | `included` | INTEGER | 지식베이스 포함 여부 (0/1) |
-| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `empty_body` / `rank_cap` (검색어별 상위 N건 초과, 블로그 220건·카페 50건) / `parse_error` |
+| `exclude_reason` | TEXT | `irrelevant` / `exact_dup` / `near_dup` / `too_short` / `empty_body` / `rank_cap` (검색어별 상위 N건 초과, 블로그 220건·카페 50건) / `parse_error` / `type_excluded` (`config.KB_EXCLUDE_TYPES`에 지정된 문서 종류, 현재 cafe) |
 | `raw_path` | TEXT | 직접 수집 문서의 원본 경로 |
 | `extra` | TEXT | JSON 문자열 (소스별 부가 정보: 의안번호, 법령 시행일 등) |
 
