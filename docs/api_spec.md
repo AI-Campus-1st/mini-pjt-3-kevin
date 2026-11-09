@@ -221,7 +221,7 @@ python -m eval.run_eval --tag <태그> [--collection kb_A_te3s] [--retrieval-onl
 | `primary_quota` | `PRIMARY_QUOTA` (None) | 문서 단위 상위 5위 안 1차 자료(등급 1~2) 최소 문서 수 (실험 후 미채택) |
 | `doc_chunk_cap` | `DOC_CHUNK_CAP` (None) | 컨텍스트 문서당 최대 청크 수 (실험 후 미채택) |
 | `score_threshold` | `SCORE_THRESHOLD` (None) | 이 값 미만 청크 제외, 남는 청크가 없으면 검색 실패 처리. None이면 미적용 |
-| `prompt_version` | `PROMPT_VERSION` (`v1`) | `rag.prompts.SYSTEM_PROMPTS` 키 |
+| `prompt_version` | `PROMPT_VERSION` (`v2`, Day 6 채택. E0·E3은 `v1`) | `rag.prompts.SYSTEM_PROMPTS` 키 |
 | `llm_model` | `LLM_MODEL` | 생성·재작성 모델 |
 | `reasoning_effort` | `LLM_REASONING_EFFORT` (None) | None이면 모델 기본값 |
 | `rewrite` | True | 대화 이력이 있을 때 질의 재작성 수행 여부 |

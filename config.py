@@ -129,7 +129,8 @@ PRIMARY_QUOTA = None
 DOC_CHUNK_CAP = None
 # 유사도 임계값: None이면 미적용 (E0 baseline 정의, E3에서 값 결정)
 SCORE_THRESHOLD = None
-PROMPT_VERSION = 'v1'
+# 프롬프트 버전: v2 채택 (E4, 사용자 결정 2026-11-09). E0 baseline 재현 시 v1 (eval: --prompt-version v1)
+PROMPT_VERSION = 'v2'
 # 생성 단계에 전달하는 이전 대화 턴 수, 이전 답변 최대 길이
 HISTORY_TURNS = 3
 HISTORY_ANSWER_MAX_CHARS = 800

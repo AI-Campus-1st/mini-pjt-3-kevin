@@ -1,0 +1,147 @@
+{
+ "grader": "claude",
+ "sheet": "grade_sheet_claude.csv",
+ "overall": {
+  "n_answerable": 52,
+  "n_graded": 52,
+  "accuracy_mean": 0.7692,
+  "correct_or_partial": 0.9038,
+  "accuracy_counts": {
+   "정확": 33,
+   "부분": 14,
+   "오답": 5
+  },
+  "citation_y": 1.0,
+  "citation_y_or_partial": 1.0,
+  "citation_counts": {
+   "y": 54
+  },
+  "refusal_acc": 1.0,
+  "false_refusal_rate": 0.0769,
+  "n_unanswerable_graded": 8,
+  "n_answerable_refusal_graded": 52
+ },
+ "by_type": {
+  "compare": {
+   "n_answerable": 10,
+   "n_graded": 10,
+   "accuracy_mean": 0.6,
+   "correct_or_partial": 0.9,
+   "accuracy_counts": {
+    "정확": 3,
+    "부분": 6,
+    "오답": 1
+   },
+   "citation_y": 1.0,
+   "citation_y_or_partial": 1.0,
+   "citation_counts": {
+    "y": 10
+   },
+   "refusal_acc": null,
+   "false_refusal_rate": 0.2,
+   "n_unanswerable_graded": 0,
+   "n_answerable_refusal_graded": 10
+  },
+  "fact": {
+   "n_answerable": 22,
+   "n_graded": 22,
+   "accuracy_mean": 0.8864,
+   "correct_or_partial": 0.9091,
+   "accuracy_counts": {
+    "정확": 19,
+    "부분": 1,
+    "오답": 2
+   },
+   "citation_y": 1.0,
+   "citation_y_or_partial": 1.0,
+   "citation_counts": {
+    "y": 21
+   },
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0909,
+   "n_unanswerable_graded": 0,
+   "n_answerable_refusal_graded": 22
+  },
+  "synthesis": {
+   "n_answerable": 10,
+   "n_graded": 10,
+   "accuracy_mean": 0.65,
+   "correct_or_partial": 0.9,
+   "accuracy_counts": {
+    "정확": 4,
+    "부분": 5,
+    "오답": 1
+   },
+   "citation_y": 1.0,
+   "citation_y_or_partial": 1.0,
+   "citation_counts": {
+    "y": 10
+   },
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0,
+   "n_unanswerable_graded": 0,
+   "n_answerable_refusal_graded": 10
+  },
+  "temporal": {
+   "n_answerable": 10,
+   "n_graded": 10,
+   "accuracy_mean": 0.8,
+   "correct_or_partial": 0.9,
+   "accuracy_counts": {
+    "정확": 7,
+    "부분": 2,
+    "오답": 1
+   },
+   "citation_y": 1.0,
+   "citation_y_or_partial": 1.0,
+   "citation_counts": {
+    "y": 10
+   },
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0,
+   "n_unanswerable_graded": 0,
+   "n_answerable_refusal_graded": 10
+  },
+  "unanswerable": {
+   "n_answerable": 0,
+   "n_graded": 0,
+   "accuracy_mean": null,
+   "correct_or_partial": null,
+   "accuracy_counts": {
+    "정확": 0,
+    "부분": 0,
+    "오답": 0
+   },
+   "citation_y": 1.0,
+   "citation_y_or_partial": 1.0,
+   "citation_counts": {
+    "y": 3
+   },
+   "refusal_acc": 1.0,
+   "false_refusal_rate": null,
+   "n_unanswerable_graded": 8,
+   "n_answerable_refusal_graded": 0
+  }
+ },
+ "failure_layer": {
+  "total": {
+   "retrieval": 18,
+   "indexing": 1
+  },
+  "by_type": {
+   "compare": {
+    "retrieval": 7
+   },
+   "fact": {
+    "retrieval": 3
+   },
+   "synthesis": {
+    "retrieval": 6
+   },
+   "temporal": {
+    "retrieval": 2,
+    "indexing": 1
+   }
+  }
+ }
+}
