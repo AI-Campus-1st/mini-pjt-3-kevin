@@ -1,0 +1,142 @@
+{
+ "overall": {
+  "n": 52,
+  "hit@1": 0.5577,
+  "hit@3": 0.6923,
+  "hit@5": 0.8077,
+  "ctx_hit": 0.75,
+  "mrr": 0.6573
+ },
+ "by_type": {
+  "compare": {
+   "n": 10,
+   "hit@1": 0.7,
+   "hit@3": 0.8,
+   "hit@5": 0.8,
+   "ctx_hit": 0.8,
+   "mrr": 0.7611
+  },
+  "fact": {
+   "n": 22,
+   "hit@1": 0.5909,
+   "hit@3": 0.7273,
+   "hit@5": 0.8636,
+   "ctx_hit": 0.7727,
+   "mrr": 0.6985
+  },
+  "synthesis": {
+   "n": 10,
+   "hit@1": 0.6,
+   "hit@3": 0.6,
+   "hit@5": 0.7,
+   "ctx_hit": 0.7,
+   "mrr": 0.6583
+  },
+  "temporal": {
+   "n": 10,
+   "hit@1": 0.3,
+   "hit@3": 0.6,
+   "hit@5": 0.8,
+   "ctx_hit": 0.7,
+   "mrr": 0.4617
+  }
+ },
+ "by_source_need": {
+  "bill": {
+   "n": 1,
+   "hit@1": 1.0,
+   "hit@3": 1.0,
+   "hit@5": 1.0,
+   "ctx_hit": 1.0,
+   "mrr": 1.0
+  },
+  "law": {
+   "n": 11,
+   "hit@1": 0.3636,
+   "hit@3": 0.6364,
+   "hit@5": 0.7273,
+   "ctx_hit": 0.6364,
+   "mrr": 0.5182
+  },
+  "minutes": {
+   "n": 3,
+   "hit@1": 0.3333,
+   "hit@3": 0.3333,
+   "hit@5": 0.3333,
+   "ctx_hit": 0.3333,
+   "mrr": 0.3889
+  },
+  "news": {
+   "n": 5,
+   "hit@1": 0.4,
+   "hit@3": 0.6,
+   "hit@5": 1.0,
+   "ctx_hit": 1.0,
+   "mrr": 0.6
+  },
+  "press_release": {
+   "n": 6,
+   "hit@1": 0.3333,
+   "hit@3": 0.6667,
+   "hit@5": 1.0,
+   "ctx_hit": 0.6667,
+   "mrr": 0.5472
+  },
+  "report": {
+   "n": 24,
+   "hit@1": 0.75,
+   "hit@3": 0.7917,
+   "hit@5": 0.8333,
+   "ctx_hit": 0.8333,
+   "mrr": 0.7928
+  },
+  "veto": {
+   "n": 2,
+   "hit@1": 0.5,
+   "hit@3": 0.5,
+   "hit@5": 0.5,
+   "ctx_hit": 0.5,
+   "mrr": 0.5
+  }
+ },
+ "ctx_doc_type_share": {
+  "report": 0.4767,
+  "news": 0.1767,
+  "press_release": 0.1667,
+  "law": 0.0567,
+  "guideline": 0.05,
+  "bill": 0.04,
+  "blog": 0.0133,
+  "veto": 0.01,
+  "minutes": 0.01
+ },
+ "ctx_n_docs_mean": 2.9833,
+ "status": {
+  "ok": 60
+ },
+ "top1_score": {
+  "hit": {
+   "n": 29,
+   "mean": 0.644,
+   "min": 0.4484,
+   "max": 0.7362
+  },
+  "miss": {
+   "n": 23,
+   "mean": 0.6152,
+   "min": 0.4826,
+   "max": 0.7054
+  },
+  "unanswerable": {
+   "n": 8,
+   "mean": 0.5991,
+   "min": 0.3706,
+   "max": 0.7028
+  }
+ },
+ "latency_retrieve_p50": 6.6,
+ "latency_retrieve_p95": 8.6,
+ "n_questions": 60,
+ "top_k": 5,
+ "query_embed_ms_per_q": 8.3
+}

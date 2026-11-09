@@ -6,7 +6,7 @@ RAG 체인 (docs/api_spec.md §4)
 """
 import re
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Iterator
 
 from langchain_core.output_parsers import StrOutputParser
@@ -29,6 +29,11 @@ def default_cfg() -> dict:
     return {
         'collection': config.DEFAULT_COLLECTION,
         'top_k': config.TOP_K,
+        'fetch_k': config.FETCH_K,
+        'hybrid': config.HYBRID,
+        'tier_bonus': config.TIER_BONUS,
+        'primary_quota': config.PRIMARY_QUOTA,
+        'doc_chunk_cap': config.DOC_CHUNK_CAP,
         'score_threshold': config.SCORE_THRESHOLD,
         'prompt_version': config.PROMPT_VERSION,
         'llm_model': config.LLM_MODEL,
@@ -49,6 +54,7 @@ class Prepared:
     history_msgs: list
     status: str
     latency_ms: dict = field(default_factory=dict)
+    candidates: list[RetrievedChunk] = field(default_factory=list)
 
 
 @dataclass
@@ -124,11 +130,41 @@ def extract_citations(text: str, sources: list[dict]) -> tuple[list[dict], list[
     return cites, invalid
 
 
+def tier_score(c: RetrievedChunk, bonus: dict) -> float:
+    """유사도 + 신뢰등급 가산점 (tier_bonus 정렬 기준)"""
+    return c.score + bonus.get(int(c.meta.get('source_tier', 0)), 0.0)
+
+
+def apply_primary_quota(chunks: list[RetrievedChunk], quota: int, slots: int = 5) -> list[RetrievedChunk]:
+    """문서 단위 상위 slots개 안에 1차 자료(신뢰등급 1~2) 문서가 quota개 이상 오도록 문서 순서 조정
+    - 남은 자리 수가 채워야 할 1차 자료 수와 같아지면 그 자리부터는 1차 자료 문서만 배치
+    - 상위 slots개 문서의 최고 순위 청크를 조정된 순서로 앞에 두고, 나머지 청크는 원래 순서 유지"""
+    order: list[str] = []
+    head: dict[str, RetrievedChunk] = {}
+    for c in chunks:
+        if c.doc_id not in head:
+            head[c.doc_id] = c
+            order.append(c.doc_id)
+    is_primary = {d: 1 <= int(head[d].meta.get('source_tier', 0)) <= 2 for d in order}
+    need = min(quota, sum(is_primary.values()))
+    placed, rest = [], list(order)
+    while rest and len(placed) < slots:
+        remaining = slots - len(placed)
+        have = sum(1 for d in placed if is_primary[d])
+        d = next(x for x in rest if is_primary[x]) if need - have >= remaining else rest[0]
+        placed.append(d)
+        rest.remove(d)
+    heads = [head[d] for d in placed]
+    head_ids = {c.chunk_id for c in heads}
+    return heads + [c for c in chunks if c.chunk_id not in head_ids]
+
+
 def detect_refusal(text: str) -> tuple[bool, bool]:
     """(첫 문장이 거절인지, 답변 어딘가에 거절 표현이 있는지)
     - 프롬프트가 핵심 근거 부재 시 첫 문장을 거절 문구로 시작하도록 지시하므로 첫 문장으로 판정
-    - 결론 둘째 문장 이후의 "일부 확인 불가" 서술은 부분 거절로만 집계"""
-    head = re.split(r'\n\s*\n|\n#', text.strip(), maxsplit=1)[0]
+    - 결론 둘째 문장 이후의 "일부 확인 불가" 서술은 부분 거절로만 집계
+    - 문장 끝 인용 번호("...입니다.[1] 다만")가 문장 분리를 막지 않도록 인용 번호 제거 후 분리"""
+    head = CITE_RE.sub('', re.split(r'\n\s*\n|\n#', text.strip(), maxsplit=1)[0])
     first = re.split(r'(?<=[.!?])\s', head, maxsplit=1)[0]
     return bool(REFUSAL_PAT.search(first)), bool(REFUSAL_PAT.search(text))
 
@@ -138,6 +174,8 @@ class RagChain:
         self.cfg = {**default_cfg(), **(cfg or {})}
         self.retriever = Retriever(self.cfg['collection'], top_k=self.cfg['top_k'])
         self.title_prefix = bool(self.retriever.info.get('title_prefix', True))
+        if self.cfg['hybrid']:   # BM25 인덱스·형태소 분석기를 생성 시점에 적재 (첫 질문 지연 방지)
+            self.retriever.bm25.search('지역사랑상품권', 1)
         llm_kwargs = {'model': self.cfg['llm_model']}
         if config.LLM_TEMPERATURE is not None:
             llm_kwargs['temperature'] = config.LLM_TEMPERATURE
@@ -183,8 +221,16 @@ class RagChain:
         lat['rewrite'] = round((time.perf_counter() - t0) * 1000, 1)
 
         t0 = time.perf_counter()
-        chunks = self.retriever.search(query, k=self.cfg['top_k'], filters=filters)
+        fetch_k = max(self.cfg['fetch_k'], self.cfg['top_k'])
+        if self.cfg['hybrid']:
+            bonus = self.cfg.get('tier_bonus')
+            found = self.retriever.search_hybrid(query, k=fetch_k, filters=filters,
+                                                 vec_key=(lambda c: tier_score(c, bonus)) if bonus else None)
+        else:
+            found = self.retriever.search(query, k=fetch_k, filters=filters)
+        candidates = self.rerank(found)
         lat['retrieve'] = round((time.perf_counter() - t0) * 1000, 1)
+        chunks = self.select_context(candidates)
 
         status = 'ok'
         thr = self.cfg['score_threshold']
@@ -197,7 +243,37 @@ class RagChain:
         sources = group_sources(chunks, self.title_prefix)
         return Prepared(question=question, query=query, rewritten=rewritten, chunks=chunks, sources=sources,
                         context=format_context(sources), history_msgs=self._history_msgs(recent),
-                        status=status, latency_ms=lat)
+                        status=status, latency_ms=lat, candidates=candidates)
+
+    def rerank(self, candidates: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        """검색 후보 재정렬 (Day 5 검색 개선 실험, 설정이 없으면 검색 순서 유지)
+        - tier_bonus: 신뢰등급별 가산점을 유사도에 더해 재정렬 (하이브리드는 검색 단계에서 벡터 순위에 적용 후 RRF 결합)
+        - primary_quota: 문서 단위 상위 5위 안에 1차 자료(신뢰등급 1~2) 문서를 최소 N개 배치, 나머지는 원래 순서"""
+        out = list(candidates)
+        bonus = self.cfg.get('tier_bonus')
+        if bonus and not self.cfg['hybrid']:
+            out.sort(key=lambda c: -tier_score(c, bonus))
+        quota = self.cfg.get('primary_quota')
+        if quota:
+            out = apply_primary_quota(out, quota)
+        return [replace(c, rank=i) for i, c in enumerate(out, start=1)]
+
+    def select_context(self, candidates: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        """검색 후보(fetch_k)에서 생성 단계에 넣을 top_k 청크 선택
+        - 기본: 후보 순서대로 상위 top_k
+        - doc_chunk_cap: 문서당 최대 청크 수 제한 (장문 문서 한 건이 컨텍스트를 독점하는 것 방지)"""
+        cap = self.cfg.get('doc_chunk_cap')
+        if not cap:
+            return candidates[:self.cfg['top_k']]
+        out, per_doc = [], {}
+        for c in candidates:
+            if per_doc.get(c.doc_id, 0) >= cap:
+                continue
+            per_doc[c.doc_id] = per_doc.get(c.doc_id, 0) + 1
+            out.append(c)
+            if len(out) == self.cfg['top_k']:
+                break
+        return out
 
     def stream(self, prep: Prepared) -> Iterator[str]:
         t0 = time.perf_counter()

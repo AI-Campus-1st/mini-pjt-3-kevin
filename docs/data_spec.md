@@ -19,7 +19,7 @@ data/raw/news/provided_news.jsonl   data/raw/{source}/ + data/manifest.jsonl + d
 store/docs.db  (원문 전체 + 구획 + 처리 로그 + 청크 텍스트)
         │ python -m indexer chunk → embed
         ▼
-store/chroma/  (청크 + 임베딩 + 메타데이터)   store/bm25/ (하이브리드 검색 확장 시)
+store/chroma/  (청크 + 임베딩 + 메타데이터)   store/bm25/ (BM25 인덱스, 하이브리드 검색)
         │ rag/ (조회 전용)
         ▼
 app/ (챗봇)            eval/ (평가셋, 실험 결과)
@@ -34,6 +34,7 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 | `data/interim/` | EDA 요약 등 중간 산출물 | 제외 | 노트북·인덱서 재실행 |
 | `store/docs.db` | 원문 DB | 제외 | `python -m indexer` |
 | `store/chroma/` | 벡터 DB | 제외 | `python -m indexer` |
+| `store/bm25/` | BM25 인덱스 (청크 × 어휘 가중치) | 제외 | `python -m indexer bm25 --collection kb_A_te3s` |
 | `eval/eval_set.jsonl` | 평가셋 | **추적** | 수작업 |
 | `eval/results/` | 실험별 결과 | **추적** | `python -m eval.run_eval` |
 
@@ -369,8 +370,8 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `changed_variable` | 기준 대비 변경한 단일 변수 |
 | `collection` | 사용 컬렉션 |
 | `embedding_model`, `chunk_config`, `title_prefix` | 컬렉션 메타데이터 사본 |
-| `top_k`, `score_threshold` | 검색 설정 |
-| `prompt_version`, `llm_model`, `temperature` | 생성 설정 |
+| `top_k`, `fetch_k`, `score_threshold`, `hybrid`, `tier_bonus`, `primary_quota`, `doc_chunk_cap` | 검색 설정 |
+| `prompt_version`, `llm_model`, `temperature`, `reasoning_effort`, `generations` | 생성 설정 (full 모드) |
 | `eval_set_sha1` | 평가셋 파일 해시 (평가셋 변경 여부 추적) |
 | `mode` | `retrieval_only` / `full` |
 | `run_at` | 실행 시각 |
@@ -384,10 +385,12 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 | `hit_rank` | 첫 적중 순위 (없으면 null) |
 | `hit@1`, `hit@3`, `hit@5`, `rr` | 문항별 지표 |
 | `top1_score` | 유사도 분포 분석용 |
-| `answer` | 생성 답변 (`full` 모드) |
-| `citations` | 답변 속 인용 번호와 doc_id 대응 `[{"n", "doc_id"}]` |
-| `refused` | 거절 여부 |
-| `latency_ms` | `{"retrieve", "generate", "total"}` |
+| `answer` | 대표 답변 (`full` 모드, 거절 다수결과 판정이 같은 첫 생성) |
+| `citations` | 대표 답변 속 인용 번호와 doc_id 대응 `[{"n", "doc_id"}]` |
+| `refused`, `refused_votes` | 거절 다수결 결과, 거절 판정된 생성 수 |
+| `cited_gold`, `points_found` | 대표 답변이 인용한 정답 문서, 답변에 등장한 `required_points` |
+| `generations` | 생성별 `answer`, `citations`, `refused`, `partial_refusal`, `latency_ms` |
+| `latency_ms` | `{"retrieve", "generate", "total"}` (생성은 대표 답변 기준) |
 
 ### 7-3. `summary.json`
 
@@ -395,14 +398,25 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 
 ### 7-4. `grade_sheet.csv` (직접 채점)
 
+- full 모드 실행 시 결과 폴더에 생성 (UTF-8 BOM, 쉼표 구분). Excel 저장본(CP949 탭 구분)도 `eval/grade.py`가 열 이름으로 읽음
+- 문항당 1행, 대표 답변을 채점
+
 | 컬럼 | 값 |
 |---|---|
-| `id`, `type`, `q`, `answer_key`, `answer` | 자동 기입 |
-| `accuracy` | 1 / 0.5 / 0 |
-| `citation_correct` | Y / N / partial |
-| `refusal_correct` | Y / N / NA |
-| `failure_layer` | `data` / `preprocess` / `indexing` / `retrieval` / `generation` / 빈칸 |
+| `id`, `type`, `q`, `answer_key`, `required_points`, `answer` | 자동 기입 |
+| `hit_rank`, `ctx_hit` | 검색 지표 (정답 문서 순위, 컨텍스트 포함 여부) |
+| `refused_votes`, `refused_auto` | 거절 판정 생성 수 / 생성 수, 다수결 거절 여부 (Y/N) |
+| `points_auto` | `required_points` 중 답변에 등장한 수 (자동 참고값) |
+| `cited_n`, `cited_gold_n`, `invalid_citations` | 인용 문서 수, 그중 정답 문서 수, 컨텍스트에 없는 번호 |
+| `layer_hint` | 실패 계층 자동 추정 (정답 문서 컨텍스트 미포함 → retrieval 후보 등, 참고값) |
+| `sources` | 컨텍스트 문서 목록 `[n] 종류 | 제목 | 발행일 | doc_id (인용)` |
+| `accuracy` | 1 / 0.5 / 0 (정확 / 부분 / 오답), 답변 가능 문항만 |
+| `citation_correct` | Y / partial / N (인용 [n]이 해당 주장의 실제 근거인지), 인용이 없으면 빈칸 |
+| `refusal_correct` | Y / N / NA (거절 판단이 맞았는지: 답변 불가 문항은 거절 시 Y, 답변 가능 문항은 거절 시 N·답변 시 Y) |
+| `failure_layer` | `data` / `preprocess` / `indexing` / `retrieval` / `generation` / 빈칸 (accuracy 1 미만 문항) |
 | `memo` | 판정 근거 |
+
+- 집계: `python -m eval.grade <결과 폴더>` → `graded_summary.json`
 
 ---
 

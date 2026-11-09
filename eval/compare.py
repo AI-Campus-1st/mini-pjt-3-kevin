@@ -11,15 +11,22 @@ from pathlib import Path
 RESULTS_DIR = Path(__file__).resolve().parent / 'results'
 
 
-def latest(tag: str) -> Path | None:
-    runs = sorted(p for p in RESULTS_DIR.glob(f'*_{tag}') if (p / 'summary.json').exists())
-    return runs[-1] if runs else None
+def latest(tag: str, mode: str | None = None) -> Path | None:
+    """태그가 정확히 일치하는 최신 실행 (폴더명 {YYYYMMDD-HHMM}_{tag}, mode 지정 시 config.json의 mode까지 일치)"""
+    runs = []
+    for p in RESULTS_DIR.glob(f'*_{tag}'):
+        if p.name.split('_', 1)[1] != tag or not (p / 'summary.json').exists():
+            continue
+        if mode and json.loads((p / 'config.json').read_text(encoding='utf-8')).get('mode') != mode:
+            continue
+        runs.append(p)
+    return sorted(runs)[-1] if runs else None
 
 
 def main(tags: list[str]):
     rows = []
     for t in tags:
-        d = latest(t)
+        d = latest(t, 'retrieval_only') or latest(t)
         if not d:
             print(f'결과 없음: {t}')
             continue

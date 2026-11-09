@@ -1,0 +1,226 @@
+{
+ "overall": {
+  "n": 52,
+  "hit@1": 0.6731,
+  "hit@3": 0.75,
+  "hit@5": 0.8462,
+  "ctx_hit": 0.8077,
+  "mrr": 0.7356
+ },
+ "by_type": {
+  "compare": {
+   "n": 10,
+   "hit@1": 0.6,
+   "hit@3": 0.8,
+   "hit@5": 0.9,
+   "ctx_hit": 0.8,
+   "mrr": 0.725
+  },
+  "fact": {
+   "n": 22,
+   "hit@1": 0.8182,
+   "hit@3": 0.8636,
+   "hit@5": 0.9091,
+   "ctx_hit": 0.8636,
+   "mrr": 0.8523
+  },
+  "synthesis": {
+   "n": 10,
+   "hit@1": 0.7,
+   "hit@3": 0.8,
+   "hit@5": 0.8,
+   "ctx_hit": 0.8,
+   "mrr": 0.75
+  },
+  "temporal": {
+   "n": 10,
+   "hit@1": 0.4,
+   "hit@3": 0.4,
+   "hit@5": 0.7,
+   "ctx_hit": 0.7,
+   "mrr": 0.475
+  }
+ },
+ "by_source_need": {
+  "bill": {
+   "n": 1,
+   "hit@1": 1.0,
+   "hit@3": 1.0,
+   "hit@5": 1.0,
+   "ctx_hit": 1.0,
+   "mrr": 1.0
+  },
+  "law": {
+   "n": 11,
+   "hit@1": 0.6364,
+   "hit@3": 0.6364,
+   "hit@5": 0.7273,
+   "ctx_hit": 0.6364,
+   "mrr": 0.6682
+  },
+  "minutes": {
+   "n": 3,
+   "hit@1": 0.3333,
+   "hit@3": 0.3333,
+   "hit@5": 0.3333,
+   "ctx_hit": 0.3333,
+   "mrr": 0.3333
+  },
+  "news": {
+   "n": 5,
+   "hit@1": 0.6,
+   "hit@3": 0.8,
+   "hit@5": 1.0,
+   "ctx_hit": 1.0,
+   "mrr": 0.75
+  },
+  "press_release": {
+   "n": 6,
+   "hit@1": 0.5,
+   "hit@3": 0.6667,
+   "hit@5": 1.0,
+   "ctx_hit": 1.0,
+   "mrr": 0.65
+  },
+  "report": {
+   "n": 24,
+   "hit@1": 0.7917,
+   "hit@3": 0.875,
+   "hit@5": 0.9167,
+   "ctx_hit": 0.875,
+   "mrr": 0.8438
+  },
+  "veto": {
+   "n": 2,
+   "hit@1": 0.5,
+   "hit@3": 0.5,
+   "hit@5": 0.5,
+   "ctx_hit": 0.5,
+   "mrr": 0.5
+  }
+ },
+ "ctx_doc_type_share": {
+  "report": 0.3933,
+  "news": 0.3167,
+  "press_release": 0.11,
+  "law": 0.0667,
+  "blog": 0.03,
+  "bill": 0.0267,
+  "guideline": 0.0233,
+  "veto": 0.0233,
+  "minutes": 0.01
+ },
+ "ctx_n_docs_mean": 3.35,
+ "status": {
+  "ok": 60
+ },
+ "top1_score": {
+  "hit": {
+   "n": 35,
+   "mean": 0.6251,
+   "min": 0.4374,
+   "max": 0.7363
+  },
+  "miss": {
+   "n": 17,
+   "mean": 0.592,
+   "min": 0.473,
+   "max": 0.6944
+  },
+  "unanswerable": {
+   "n": 8,
+   "mean": 0.58,
+   "min": 0.3706,
+   "max": 0.6897
+  }
+ },
+ "latency_retrieve_p50": 20.1,
+ "latency_retrieve_p95": 24.0,
+ "answer": {
+  "refusal_acc": 0.875,
+  "false_refusal_rate": 0.0577,
+  "partial_refusal_rate": 0.2692,
+  "refusal_unanimous": 0.9167,
+  "cited_gold_rate": 0.8163,
+  "points_auto": 0.7228,
+  "citations_mean": 2.0408,
+  "invalid_citation_rate": 0.0,
+  "n_answerable": 52,
+  "n_unanswerable": 8,
+  "n_answered": 49
+ },
+ "answer_by_type": {
+  "compare": {
+   "refusal_acc": null,
+   "false_refusal_rate": 0.1,
+   "partial_refusal_rate": 0.5,
+   "refusal_unanimous": 0.6,
+   "cited_gold_rate": 0.7778,
+   "points_auto": 0.6667,
+   "citations_mean": 2.1111,
+   "invalid_citation_rate": 0.0,
+   "n_answerable": 10,
+   "n_unanswerable": 0,
+   "n_answered": 9
+  },
+  "fact": {
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0909,
+   "partial_refusal_rate": 0.0909,
+   "refusal_unanimous": 1.0,
+   "cited_gold_rate": 0.9,
+   "points_auto": 0.9,
+   "citations_mean": 1.45,
+   "invalid_citation_rate": 0.0,
+   "n_answerable": 22,
+   "n_unanswerable": 0,
+   "n_answered": 20
+  },
+  "synthesis": {
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0,
+   "partial_refusal_rate": 0.3,
+   "refusal_unanimous": 0.9,
+   "cited_gold_rate": 0.8,
+   "points_auto": 0.4833,
+   "citations_mean": 3.1,
+   "invalid_citation_rate": 0.0,
+   "n_answerable": 10,
+   "n_unanswerable": 0,
+   "n_answered": 10
+  },
+  "temporal": {
+   "refusal_acc": null,
+   "false_refusal_rate": 0.0,
+   "partial_refusal_rate": 0.4,
+   "refusal_unanimous": 1.0,
+   "cited_gold_rate": 0.7,
+   "points_auto": 0.6583,
+   "citations_mean": 2.1,
+   "invalid_citation_rate": 0.0,
+   "n_answerable": 10,
+   "n_unanswerable": 0,
+   "n_answered": 10
+  },
+  "unanswerable": {
+   "refusal_acc": 0.875,
+   "false_refusal_rate": null,
+   "partial_refusal_rate": null,
+   "refusal_unanimous": 1.0,
+   "cited_gold_rate": null,
+   "points_auto": null,
+   "citations_mean": null,
+   "invalid_citation_rate": 0.0,
+   "n_answerable": 0,
+   "n_unanswerable": 8,
+   "n_answered": 0
+  }
+ },
+ "latency_generate_p50": 4033.3,
+ "latency_generate_p95": 9682.9,
+ "latency_p50": 4099.6,
+ "latency_p95": 9705.5,
+ "n_questions": 60,
+ "top_k": 5,
+ "query_embed_ms_per_q": 10.5
+}

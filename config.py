@@ -111,6 +111,22 @@ LLM_TEMPERATURE = None
 LLM_REASONING_EFFORT = None
 REWRITE_REASONING_EFFORT = 'low'
 TOP_K = 5
+# 검색 후보 청크 수: 컨텍스트(top_k) 선택 전 후보 풀, 평가의 문서 단위 순위(Hit@k, MRR@10) 산정 범위
+FETCH_K = 50
+# 검색 설정 (Day 5 검색 개선 실험 후 채택값, 사용자 결정 2026-11-07)
+# HYBRID: 벡터 + BM25 RRF 결합 (E5), RRF_K: RRF 상수
+# TIER_BONUS: 신뢰등급별 유사도 가산점 {등급: 가산점}, 하이브리드는 벡터 순위에 적용 후 RRF 결합
+# PRIMARY_QUOTA: 상위 5개 문서 중 1차 자료(등급 1~2) 최소 수, DOC_CHUNK_CAP: 컨텍스트 문서당 최대 청크 수 (실험 후 미채택)
+# E0 baseline 재현: HYBRID = False, TIER_BONUS = None (eval: --hybrid 0 --tier-bonus none)
+HYBRID = True
+RRF_K = 60
+# BM25 형태소 분석 사용자 사전: 도메인 핵심 용어가 문서마다 다르게 분리되는 문제 방지
+# (예: '지역사랑상품권법' → '지역/사랑/상품/법', '지역사랑/상품권' 혼재). 변경 시 BM25 인덱스 재구축 필요
+BM25_USER_WORDS = ['지역사랑상품권', '지역화폐', '지역상품권', '온누리상품권', '소비쿠폰', '부정유통',
+                   '대안반영폐기', '운영대행사', '정책발행', '일반발행']
+TIER_BONUS = {1: 0.04, 2: 0.04}
+PRIMARY_QUOTA = None
+DOC_CHUNK_CAP = None
 # 유사도 임계값: None이면 미적용 (E0 baseline 정의, E3에서 값 결정)
 SCORE_THRESHOLD = None
 PROMPT_VERSION = 'v1'

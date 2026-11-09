@@ -14,3 +14,4 @@ __pycache__/
 /data/interim/
 /store/chroma/
 /store/docs.db
+/store/bm25/

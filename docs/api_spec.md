@@ -140,29 +140,59 @@ Retriever(collection: str | None = None, top_k: int = config.TOP_K)
 
 ### 2-5. `dedup_docs(chunks)`
 
-- 입력 순서를 유지하며 doc_id별 첫 청크(최고 점수)만 남기고 rank를 1부터 다시 부여
+- 입력 순서를 유지하며 doc_id별 첫 청크(후보 순서상 최상위)만 남기고 rank를 1부터 다시 부여
 - 평가의 문서 단위 순위 산정에 사용
+
+### 2-6. `Retriever.search_hybrid(query, k, filters, query_embedding, rrf_k, vec_key)`
+
+- 벡터 상위 k + BM25 상위 k (`rag/bm25.py`, 필터는 메타데이터에 직접 적용) → RRF 점수 `Σ 1 / (rrf_k + 순위)` 내림차순 상위 k
+- `score`는 코사인 유사도 유지 (BM25로만 검색된 청크는 저장 임베딩과 질의 임베딩의 코사인), 임계값 판정에 그대로 사용
+- `extra`: `{"rrf", "vec_rank", "bm25_rank"}`
+- `vec_key`: 결합 전 벡터 결과 재정렬 기준 (신뢰등급 가산점)
+
+### 2-7. `rag/bm25.py`
+
+- 색인어: kiwipiepy 형태소 중 NNG·NNP·NNB·NR·SL·SH·SN·XR·VV·VA, 영문 소문자화
+- 사용자 사전 `config.BM25_USER_WORDS`: 도메인 핵심 용어를 한 단어로 분석 (예: '지역사랑상품권법' → '지역사랑상품권' + '법')
+- 인덱스: `python -m indexer bm25 --collection <컬렉션>`이 `store/bm25/{collection}/`에 저장 (`weights.npz` 청크 × 어휘 BM25 가중치, `vocab.json`, `chunk_ids.json`, `meta.json`), k1 1.5, b 0.75
+- `rag/`는 인덱스 읽기만 수행. 사용자 사전·색인어 규칙 변경 시 인덱스 재구축 필요
 
 ---
 
 ## 3. `eval/run_eval.py`
 
 ```
-python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only [--top-k 5] [--changed-variable "<설명>"] [--eval-set eval/eval_set.jsonl]
+python -m eval.run_eval --tag <태그> [--collection kb_A_te3s] [--retrieval-only] [--top-k 5] [--threshold <0~1>] [--prompt-version v1]
+                        [--generations 3] [--workers 4] [--ids q001,q002] [--changed-variable "<설명>"] [--eval-set eval/eval_set.jsonl]
 ```
+
+- 챗봇과 같은 `build_chain(cfg)`로 검색·생성 수행. 실험 설정(`collection`, `top_k`, `score_threshold`, `prompt_version`)만 `cfg`로 덮어씀
+- 검색 지표는 `Prepared.candidates`(검색 후보 `fetch_k` 청크)와 `Prepared.chunks`(생성 단계 컨텍스트)에서 산출
+- `--retrieval-only`: `prepare`만 실행 (LLM 호출 없음). 생략 시 full 모드
+- full 모드: 문항당 `--generations`회 생성 (`config.EVAL_GENERATIONS`, 기본 3), `--workers` 동시 호출
 
 | 지표 | 정의 |
 |---|---|
-| `hit@1`·`hit@3`·`hit@5` | 상위 50개 청크를 문서 단위로 중복 제거한 순위에서 정답 문서가 k위 이내 |
+| `hit@1`·`hit@3`·`hit@5` | 검색 후보 50개 청크를 문서 단위로 중복 제거한 순위에서 정답 문서가 k위 이내 |
 | `mrr` | 같은 문서 순위의 역순위 평균, 10위 밖은 0 (MRR@10) |
-| `ctx_hit` | 생성 단계에 들어가는 상위 `top_k` 청크 안에 정답 문서 청크 존재 |
-| `ctx_n_docs_mean` | 상위 `top_k` 청크의 고유 문서 수 평균 |
-| `ctx_doc_type_share` | 상위 `top_k` 청크의 문서 종류 비중 (전 문항 합산) |
+| `ctx_hit` | 생성 단계에 들어가는 컨텍스트 청크(임계값 적용 후) 안에 정답 문서 청크 존재 |
+| `ctx_n_docs_mean` | 컨텍스트 청크의 고유 문서 수 평균 |
+| `ctx_doc_type_share` | 컨텍스트 청크의 문서 종류 비중 (전 문항 합산) |
 | `top1_score` | 1위 청크 점수, 정답(hit@1)·오답·답변 불가 문항별 분포 |
+| `refusal_acc` (full) | 답변 불가 문항 중 거절(다수결) 비율 |
+| `false_refusal_rate` (full) | 답변 가능 문항 중 거절(다수결) 비율 |
+| `partial_refusal_rate` (full) | 답변 가능 문항 중 대표 답변이 부분 거절인 비율 |
+| `refusal_unanimous` (full) | 생성 간 거절 판정이 모두 같은 문항 비율 (재현성) |
+| `cited_gold_rate` (full) | 거절하지 않은 답변 가능 문항 중 정답 문서를 1건 이상 인용한 비율 (출처 정확성의 자동 참고값) |
+| `points_auto` (full) | 거절하지 않은 답변 중 `required_points` 정규식이 답변에 등장한 비율 평균 (정확도의 자동 참고값) |
+| `invalid_citation_rate` (full) | 컨텍스트에 없는 번호를 인용한 답변 비율 |
+| `latency_*` | 검색·생성·전체 p50/p95 (ms) |
 
 - 답변 불가 문항은 적중 지표 평균에서 제외하고 `top1_score`만 집계
 - 정답 판정은 data_spec §6 규칙
-- 결과 형식은 data_spec §7 (`per_question.jsonl`에 `retrieved_docs`, `ctx_doc_types`, `ctx_n_docs`, `ctx_hit`, `source_need` 필드 추가)
+- 거절 다수결: 생성 중 과반이 거절이면 거절. 대표 답변 = 다수결과 판정이 같은 첫 생성 (채점 시트에 기록)
+- 결과 형식은 data_spec §7
+- 직접 채점 집계: `python -m eval.grade <결과 폴더>` → `graded_summary.json` (정확도, 출처 정확성, 거절 정확도·오거절률, 실패 계층)
 
 ---
 
@@ -176,7 +206,7 @@ python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only
 ```
 
 - ①·⑤는 LangChain LCEL 체인 (`ChatPromptTemplate | ChatOpenAI | StrOutputParser`)
-- ②는 `rag.retriever.Retriever` (평가와 동일 검색기)
+- ②는 `rag.retriever.Retriever` (평가와 동일 검색기). 후보 `fetch_k`개를 검색한 뒤 `select_context`로 `top_k`개 선택
 - 검색 결과가 0건이거나 임계값 미달이면 ⑤를 호출하지 않고 안내·거절 응답 반환
 
 ### 4-2. `build_chain(cfg=None) -> RagChain`
@@ -185,6 +215,11 @@ python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only
 |---|---|---|
 | `collection` | `DEFAULT_COLLECTION` (`kb_A_te3s`) | 검색 컬렉션 |
 | `top_k` | `TOP_K` (5) | 생성에 전달하는 청크 수 |
+| `fetch_k` | `FETCH_K` (50) | 검색 후보 청크 수. 컨텍스트는 후보에서 `select_context`로 선택 (기본: 상위 `top_k`) |
+| `hybrid` | `HYBRID` (True) | 벡터 상위 `fetch_k` + BM25 상위 `fetch_k`를 RRF(`RRF_K` 60)로 결합 (E5, Day 5 채택) |
+| `tier_bonus` | `TIER_BONUS` (`{1: 0.04, 2: 0.04}`) | 신뢰등급별 유사도 가산점. 하이브리드면 벡터 순위에 적용한 뒤 RRF 결합 (Day 5 채택) |
+| `primary_quota` | `PRIMARY_QUOTA` (None) | 문서 단위 상위 5위 안 1차 자료(등급 1~2) 최소 문서 수 (실험 후 미채택) |
+| `doc_chunk_cap` | `DOC_CHUNK_CAP` (None) | 컨텍스트 문서당 최대 청크 수 (실험 후 미채택) |
 | `score_threshold` | `SCORE_THRESHOLD` (None) | 이 값 미만 청크 제외, 남는 청크가 없으면 검색 실패 처리. None이면 미적용 |
 | `prompt_version` | `PROMPT_VERSION` (`v1`) | `rag.prompts.SYSTEM_PROMPTS` 키 |
 | `llm_model` | `LLM_MODEL` | 생성·재작성 모델 |
@@ -193,6 +228,7 @@ python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only
 | `history_turns` | `HISTORY_TURNS` (3) | 생성 단계에 전달하는 이전 대화 턴 수 |
 
 - 챗봇과 평가가 같은 함수 호출. 평가는 실험 설정만 `cfg`로 덮어씀
+- E0 기준선 검색 재현: `hybrid=False`, `tier_bonus=None`
 
 ### 4-3. `RagChain` 메서드
 
@@ -210,7 +246,8 @@ python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only
 | `question` | 원 질문 |
 | `query` | 검색에 사용한 질의 (재작성 결과 또는 원 질문) |
 | `rewritten` | 재작성 여부 |
-| `chunks` | 검색 청크 `list[RetrievedChunk]` (임계값 적용 후) |
+| `chunks` | 컨텍스트 청크 `list[RetrievedChunk]` (`select_context` 선택, 임계값 적용 후) |
+| `candidates` | 검색 후보 청크 `fetch_k`개 (평가의 문서 단위 순위 산정용) |
 | `sources` | 컨텍스트 문서 목록 (§4-6) |
 | `status` | `ok` / `no_result` (검색 0건) / `below_threshold` (임계값 미달) |
 | `latency_ms` | `{"rewrite", "retrieve"}` |
@@ -253,7 +290,7 @@ python -m eval.run_eval --tag <태그> --collection <컬렉션> --retrieval-only
 - 거절 문구: `제공된 자료에서 확인할 수 없습니다` (`rag.prompts.REFUSAL_PHRASE`, 가이드 4-6)
 - 프롬프트 지시: 질문 핵심의 근거가 없으면 첫 문장을 거절 문구로 시작, 확인할 수 없다는 서술에는 인용 번호를 붙이지 않음
 - 판정 정규식 `rag.prompts.REFUSAL_RE`: 모델의 변형 표현 포함 (예: "제공된 자료에서는 ... 확인할 수 없습니다", "자료만으로는 ... 확인할 수 없습니다")
-- `refused` = 답변 첫 문장이 거절 정규식과 일치, 또는 생성 생략 상태(`no_result`, `below_threshold`)
+- `refused` = 답변 첫 문장(인용 번호 제거 후 분리)이 거절 정규식과 일치, 또는 생성 생략 상태(`no_result`, `below_threshold`)
 - `partial_refusal` = 첫 문장은 거절이 아니나 이후 서술에 거절 표현이 있음 (일부 항목만 확인 불가)
 - 인용 수와 무관하게 판정 (거절하면서 "해당 문서에 내용 없음"을 인용으로 설명하는 경우 대응). 자동 판정은 Day 5 채점에서 수기 확인
 

@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from app import chat  # noqa: E402
+from app import chat, dashboard  # noqa: E402
 
 st.set_page_config(page_title='지역화폐 정책 자료 챗봇', layout='wide')
 
@@ -21,4 +21,4 @@ tab_chat, tab_dash = st.tabs(['챗봇', '평가 대시보드'])
 with tab_chat:
     chat.render()
 with tab_dash:
-    st.info('평가 대시보드는 Day 5 평가·개선 결과와 함께 추가 예정')
+    dashboard.render()
