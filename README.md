@@ -78,6 +78,8 @@ python -m venv .venv
 
 - 개별 실행: `provided`(제공 CSV), `manual`(수동 자료 등록), `law`, `assembly`, `naver`, `korea_kr` 중 선택 (예: `python -m collector provided korea_kr`)
 - 결과: `data/raw/`, `data/manifest.jsonl` (모든 직접 수집 문서의 url·collected_at)
+- 재실행: manifest에 등록된 문서는 다시 등록하지 않고, 원본 파일이 없는 문서(저장소를 새로 받은 환경)는 원본만 복원. 네이버 검색 응답과 의안 목록은 파일이 이미 있으면 다시 호출하지 않음 (갱신하려면 해당 파일 삭제)
+- 제약: 네이버 검색 응답을 새로 받으면 검색 결과가 수집 당시와 달라 블로그 구성이 바뀜 → 리포트 수치의 완전한 재현에는 수집 당시의 `data/raw/naver/`가 필요
 
 ### 2. 인덱싱 계층 (배치)
 
@@ -102,8 +104,9 @@ python -m venv .venv
 ```
 
 - `docs`: 파싱·정제·관련도·중복 처리 → `store/docs.db`
-- `chunk` / `embed`: 청킹과 임베딩·Chroma 적재 (`store/chroma/`, 컬렉션 `kb_A_te3s`, 약 25분). 중단 후 재실행하면 이어서 적재
-- `verify`: 포함 문서 분포, 청크 길이 분포, chunks 테이블과 Chroma 적재 수 일치, 저장 벡터 자기 검색 점검 (`data/interim/verify_{collection}.json`)
+- `chunk` / `embed`: 청킹과 임베딩·Chroma 적재 (`store/chroma/`, 컬렉션 `kb_A_te3s`, 약 25분). 중단 후 재실행하면 이어서 적재하고, 텍스트가 바뀐 청크만 다시 임베딩
+- `docs`를 다시 실행하면 `docs.db`를 새로 만들므로 `chunk`부터 다시 실행
+- `verify`: 포함 문서 분포, 청크 길이 분포, chunks 테이블과 Chroma 적재 수·텍스트 일치, 저장 벡터 자기 검색 점검 (`data/interim/verify_{collection}.json`)
 - `bm25`: 하이브리드 검색용 BM25 인덱스 (`store/bm25/`, 약 80초)
 - 비교 실험용 컬렉션: `--preset B` (청킹 B), `--preset A --no-title` (제목 prefix 제거)
 

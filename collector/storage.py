@@ -60,15 +60,26 @@ class Manifest:
 
     def __init__(self, path: Path = config.MANIFEST_PATH):
         self.path = path
-        self.ids = set()
+        self.entries: dict[str, dict] = {}
         if path.exists():
             with open(path, encoding='utf-8') as f:
                 for line in f:
                     if line.strip():
-                        self.ids.add(json.loads(line)['doc_id'])
+                        e = json.loads(line)
+                        self.entries[e['doc_id']] = e
 
     def __contains__(self, doc_id: str) -> bool:
-        return doc_id in self.ids
+        return doc_id in self.entries
+
+    def missing_raw(self, source: str) -> list[dict]:
+        """등록되어 있으나 원본 파일이 없는 항목
+        - manifest는 git 추적, data/raw/는 git 제외이므로 새 환경에서는 등록 문서의 원본이 없음 → 수집기가 원본만 복원"""
+        return [e for e in self.entries.values()
+                if e['source'] == source and not (config.ROOT / e['raw_path']).exists()]
+
+    def find_key(self, canonical_key: str) -> dict | None:
+        """canonical_key가 같은 등록 항목 (doc_id 날짜부가 달라져도 같은 문서로 취급해야 하는 소스용)"""
+        return next((e for e in self.entries.values() if e['canonical_key'] == canonical_key), None)
 
     def add(self, entry: dict) -> bool:
         required = ['doc_id', 'source', 'doc_type', 'canonical_key', 'title', 'publisher',
@@ -76,7 +87,7 @@ class Manifest:
         missing = [k for k in required if k not in entry]
         if missing:
             raise ValueError(f'manifest 필수 필드 누락: {missing}')
-        if entry['doc_id'] in self.ids:
+        if entry['doc_id'] in self.entries:
             return False
         entry.setdefault('url', '')
         entry.setdefault('citation', '')
@@ -87,7 +98,7 @@ class Manifest:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-        self.ids.add(entry['doc_id'])
+        self.entries[entry['doc_id']] = entry
         return True
 
 

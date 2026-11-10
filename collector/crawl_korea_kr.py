@@ -3,6 +3,8 @@
 - robots.txt: User-agent * Allow / (2026-11-05 확인, docs/source_access.md)
 - 상세 페이지 본문은 스크립트로 렌더링되어 HTML에 텍스트가 없음 → 첨부 PDF(없으면 HWPX)를 원문으로 저장
 - 이용 조건: 본문 텍스트 공공누리 제1유형(출처표시), 사진·이미지는 수집하지 않음
+- 첨부가 없어 HTML만 저장된 보도자료는 인덱서가 본문을 추출할 수 없어 parse_error로 제외
+- manifest에 등록되어 있으나 원본 파일이 없는 보도자료는 newsId로 원본만 다시 받아 복원 (manifest 행 추가 없음)
 """
 import re
 from urllib.parse import quote
@@ -78,6 +80,33 @@ def pick_attachment(attachments: list[dict]):
     return None, None
 
 
+def fetch_doc(sess: PoliteSession, news_id: str, doc_id: str) -> dict | None:
+    """상세 페이지 HTML과 첨부 원본(PDF 우선, 없으면 HWPX) 저장. 상세 페이지 오류 시 None
+    - raw_path: 첨부를 받았으면 첨부 파일, 아니면 HTML"""
+    view_url = VIEW_URL.format(news_id=news_id)
+    r = sess.get(view_url)
+    if r.status_code != 200:
+        log_collect('korea_kr', view_url, 'error', r.status_code, 'view page')
+        return None
+    html_path = OUT_DIR / f'{doc_id}.html'
+    html_path.write_text(r.text, encoding='utf-8')
+    view = parse_view(r.text)
+    att, ext = pick_attachment(view['attachments'])
+    att_records, raw_path = [], html_path
+    if att:
+        fr = sess.get(att['url'])
+        if fr.status_code == 200 and fr.content:
+            att_path = OUT_DIR / f'{doc_id}__att1{ext}'
+            att_path.write_bytes(fr.content)
+            raw_path = att_path
+            att_records.append({'name': att['name'], 'url': att['url'], 'path': rel_path(att_path),
+                                'mime': 'application/pdf' if ext == '.pdf' else 'application/hwp+zip'})
+        else:
+            log_collect('korea_kr', att['url'], 'error', fr.status_code, 'attachment')
+    return {'url': view_url, 'http_status': r.status_code, 'view': view, 'raw_path': raw_path,
+            'attachments': att_records, 'has_attachment': bool(att)}
+
+
 def run(end_date: str | None = None) -> dict:
     end_date = end_date or now_kst()[:10]
     sess = PoliteSession()
@@ -88,47 +117,43 @@ def run(end_date: str | None = None) -> dict:
     for kw in config.KOREA_KR_KEYWORDS:
         for it in list_items(sess, kw, end_date):
             found.setdefault(it['news_id'], it)
-    stats = {'listed': len(found), 'added': 0, 'skipped_exists': 0, 'no_attachment': 0, 'errors': 0}
+    stats = {'listed': len(found), 'added': 0, 'skipped_exists': 0, 'no_attachment': 0, 'errors': 0,
+             'restored': 0, 'restore_mismatch': 0}
 
     for news_id, it in found.items():
         key = f'korea_kr:{news_id}'
         doc_id = make_doc_id('korea_kr', it['published_at'], key)
-        view_url = VIEW_URL.format(news_id=news_id)
         if doc_id in manifest:
             stats['skipped_exists'] += 1
             continue
-        r = sess.get(view_url)
-        if r.status_code != 200:
-            log_collect('korea_kr', view_url, 'error', r.status_code, 'view page')
+        got = fetch_doc(sess, news_id, doc_id)
+        if got is None:
             stats['errors'] += 1
             continue
-        html_path = OUT_DIR / f'{doc_id}.html'
-        html_path.write_text(r.text, encoding='utf-8')
-        view = parse_view(r.text)
-        att, ext = pick_attachment(view['attachments'])
-        att_records, raw_path = [], html_path
-        if att:
-            fr = sess.get(att['url'])
-            if fr.status_code == 200 and fr.content:
-                att_path = OUT_DIR / f'{doc_id}__att1{ext}'
-                att_path.write_bytes(fr.content)
-                raw_path = att_path
-                att_records.append({'name': att['name'], 'url': att['url'], 'path': rel_path(att_path),
-                                    'mime': 'application/pdf' if ext == '.pdf' else 'application/hwp+zip'})
-            else:
-                log_collect('korea_kr', att['url'], 'error', fr.status_code, 'attachment')
-        else:
+        if not got['has_attachment']:
             stats['no_attachment'] += 1
+        view = got['view']
         manifest.add({
             'doc_id': doc_id, 'source': 'korea_kr', 'doc_type': 'press_release',
-            'url': view_url, 'canonical_key': key,
+            'url': got['url'], 'canonical_key': key,
             'title': view['title'] or it['title'], 'publisher': it['publisher'],
             'published_at': view['published_at'] or it['published_at'],
             'collected_at': now_kst(), 'collect_method': 'crawl',
-            'raw_path': rel_path(raw_path), 'attachments': att_records,
-            'license': '공공누리 제1유형 (본문 텍스트)', 'http_status': r.status_code,
+            'raw_path': rel_path(got['raw_path']), 'attachments': got['attachments'],
+            'license': '공공누리 제1유형 (본문 텍스트)', 'http_status': got['http_status'],
             'note': f'검색어: {it["keyword"]}',
         })
-        log_collect('korea_kr', view_url, 'ok', r.status_code)
+        log_collect('korea_kr', got['url'], 'ok', got['http_status'])
         stats['added'] += 1
+
+    # 등록 문서의 원본 복원 (새 환경: manifest만 있고 data/raw/가 없는 상태). manifest 행은 추가하지 않음
+    for e in manifest.missing_raw('korea_kr'):
+        got = fetch_doc(sess, e['canonical_key'].split(':', 1)[1], e['doc_id'])
+        if got is None:
+            stats['errors'] += 1
+            continue
+        same = rel_path(got['raw_path']) == e['raw_path']
+        log_collect('korea_kr', got['url'], 'ok' if same else 'error', got['http_status'],
+                    'raw restored' if same else f'raw restored as {rel_path(got["raw_path"])}, manifest {e["raw_path"]}')
+        stats['restored' if same else 'restore_mismatch'] += 1
     return stats

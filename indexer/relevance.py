@@ -25,7 +25,7 @@ def is_relevant(doc_type: str, collect_method: str, title: str, body: str) -> tu
         ok = in_title or (n >= config.RELEVANCE_MIN_COUNT and density >= config.RELEVANCE_MIN_DENSITY_PER_1K)
         return ok, 'R4'
     if doc_type == 'press_release':
-        return in_title or n >= 2, 'PR2'
+        return in_title or n >= config.PRESS_RELEASE_MIN_COUNT, 'PR2'
     if doc_type in ('blog', 'cafe'):
         # 검색 API는 검색어 일부만 일치해도 반환 → 제목·요약문에 동의어가 있는 글만 포함
         return len(body) >= 30 and (in_title or n >= 1), 'snippet_kw'

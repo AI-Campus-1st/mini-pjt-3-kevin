@@ -2,6 +2,7 @@
 법령 원문 수집 (국가법령정보 공동활용 Open API)
 - 현행 법률·시행령·시행규칙 본문 JSON 저장
 - 응답의 상세 링크에 OC 값이 포함되므로 manifest에는 OC 없는 공개 URL만 기록
+- manifest에 등록되어 있으나 원본 JSON이 없는 법령은 법령일련번호(MST)로 본문만 다시 받아 복원 (manifest 행 추가 없음)
 """
 import json
 import os
@@ -30,7 +31,7 @@ def run() -> dict:
     r = sess.get(SEARCH_URL, params={'OC': oc, 'target': 'law', 'type': 'JSON', 'query': config.LAW_QUERY})
     laws = r.json()['LawSearch'].get('law', [])
     laws = laws if isinstance(laws, list) else [laws]
-    stats = {'listed': len(laws), 'added': 0, 'skipped_exists': 0}
+    stats = {'listed': len(laws), 'added': 0, 'skipped_exists': 0, 'restored': 0}
     for law in laws:
         mst = law['법령일련번호']
         name = law['법령명한글']
@@ -53,4 +54,17 @@ def run() -> dict:
         })
         log_collect('law', f'MST={mst}', 'ok', body.status_code, name)
         stats['added'] += 1
+
+    # 등록 문서의 원본 복원 (새 환경: manifest만 있고 data/raw/가 없는 상태)
+    for e in manifest.missing_raw('law'):
+        mst = e['canonical_key'].split(':', 1)[1]
+        body = sess.get(SERVICE_URL, params={'OC': oc, 'target': 'law', 'type': 'JSON', 'MST': mst})
+        if body.status_code != 200:
+            log_collect('law', f'MST={mst}', 'error', body.status_code, 'raw restore')
+            continue
+        path = config.ROOT / e['raw_path']
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(body.json(), ensure_ascii=False, indent=1), encoding='utf-8')
+        log_collect('law', f'MST={mst}', 'ok', body.status_code, 'raw restored')
+        stats['restored'] += 1
     return stats

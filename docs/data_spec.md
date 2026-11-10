@@ -28,7 +28,7 @@ app/ (챗봇)            eval/ (평가셋, 실험 결과)
 | 경로 | 내용 | git 추적 | 재생성 방법 |
 |---|---|---|---|
 | `data/news_csv_5y/` | 제공 뉴스 CSV | 제외 | 교육 과정 배포본 |
-| `data/raw/` | 직접 수집 원본 (HTML·PDF·HWP·JSON) | 제외 | 수집기 재실행, 수동 자료는 manifest의 URL로 재다운로드 |
+| `data/raw/` | 직접 수집 원본 (HTML·PDF·HWP·JSON) | 제외 | 수집기 재실행 (manifest 등록 문서는 원본만 복원, §3-2). 수동 자료는 `data/manual_sources.csv`의 서지(`citation`)로 기관 누리집에서 다시 받아 `data/raw/reports/`에 같은 파일명으로 저장 |
 | `data/manifest.jsonl` | 직접 수집 문서의 출처·수집 일시 목록 | **추적** | 수집기가 추가 기록 |
 | `data/manual_sources.csv` | 수동 다운로드 자료의 서지 정보 (§3-3) | **추적** | 수작업 |
 | `data/interim/` | EDA 요약 등 중간 산출물 | 제외 | 노트북·인덱서 재실행 |
@@ -118,7 +118,8 @@ doc_id = {source}_{yyyymmdd}_{sha1(canonical_key)[:8]}
 | 수동 다운로드 | 다운로드 페이지 URL, 없으면 `file:{sha1(파일 바이트)}` | |
 
 - 예: `news_20250212_3f9a1c2b`, `korea_kr_20250804_9b0e77d1`
-- 해시 충돌 확인: 적재 시 동일 doc_id·다른 canonical_key이면 오류 처리
+- 해시 충돌 확인: 제공 뉴스 적재 시 동일 doc_id·다른 canonical_key이면 오류 처리 (`collector/load_provided.py`). 직접 수집 문서는 등록된 doc_id를 다시 기록하지 않음
+- 의안 목록(`assembly:bills:{AGE}:{BILL_NAME}`)은 날짜부가 최신 발의일이므로, 같은 canonical_key가 이미 등록되어 있으면 기존 doc_id를 유지
 - doc_id는 평가셋 정답(`gold_doc_ids`)의 기준이므로 재인덱싱·임계값 변경에도 불변이어야 함
 
 ---
@@ -133,7 +134,8 @@ data/raw/{source}/{doc_id}__att{n}.{pdf|hwp}      # 첨부파일
 data/raw/reports/                                  # 수동 다운로드 PDF (서지 정보는 data/manual_sources.csv)
 ```
 
-- 제공 뉴스는 `data/raw/`에 복사하지 않고 CSV에서 직접 적재
+- 제공 뉴스는 원본 CSV를 복사하지 않고, doc_id를 부여한 정규화 결과를 `data/raw/news/provided_news.jsonl`로 저장 (manifest 기록 대상 아님)
+- 네이버 검색 응답은 검색어별 파일 `data/raw/naver/{blog|cafearticle}/{검색어}.json`, 의안 목록은 `data/raw/assembly/bills_age{AGE}.json`
 
 ### 3-2. `manifest.jsonl` (1행 = 1문서, 추가 기록 방식)
 
@@ -161,7 +163,10 @@ data/raw/reports/                                  # 수동 다운로드 PDF (�
 {"doc_id": "korea_kr_20250804_9b0e77d1", "source": "korea_kr", "doc_type": "press_release", "url": "https://www.korea.kr/briefing/pressReleaseView.do?newsId=...", "canonical_key": "korea_kr:...", "title": "...", "publisher": "행정안전부", "published_at": "2025-08-04", "collected_at": "2026-11-05T15:30:12+09:00", "collect_method": "crawl", "raw_path": "data/raw/korea_kr/korea_kr_20250804_9b0e77d1.html", "attachments": [{"name": "....pdf", "url": "...", "path": "data/raw/korea_kr/korea_kr_20250804_9b0e77d1__att1.pdf", "mime": "application/pdf"}], "license": "공공누리 제1유형", "http_status": 200, "note": ""}
 ```
 
-- 동일 doc_id 재수집 시 manifest에 새 행을 추가하지 않고 `collect_log`에만 기록
+- 동일 doc_id 재수집 시 manifest에 새 행을 추가하지 않음
+- 등록 문서의 원본 파일이 없으면(새 환경: manifest만 있고 `data/raw/` 없음) 수집기가 원본만 다시 받아 `raw_path`에 복원하고 `collect_log`에 `raw restored` 기록 (보도자료·법령·의안 목록)
+- 네이버 검색 응답 파일과 의안 목록 파일은 이미 있으면 다시 호출하지 않음 (덮어쓰면 등록 문서의 요약문·검색 순위·목록이 바뀌어 지식베이스 구성이 달라짐). 갱신하려면 해당 파일 삭제 후 재실행
+- 네이버 검색 응답을 새로 받은 환경에서는 검색 결과가 수집 당시와 달라, manifest에 등록된 블로그 중 응답에 없는 글은 요약문이 비어 `empty_body`로 제외됨
 
 ### 3-3. 수동 자료 서지 (`data/manual_sources.csv`)
 

@@ -7,7 +7,7 @@
 |---|---|---|
 | §1 | 외부 API (네이버 검색·법령 Open API·열린국회정보·OpenAI) | 확정 (Day 2 수집 기준, Day 4 문서화) |
 | §2 | `rag/retriever.py` | 확정 (Day 3) |
-| §3 | `eval/run_eval.py` | 확정 (Day 3, retrieval-only 모드) |
+| §3 | `eval/run_eval.py` | 확정 (Day 3 retrieval-only 모드, Day 5 full 모드·검색 실험 옵션) |
 | §4 | `rag/chain.py` `build_chain(cfg)`, `rag/docstore.py` | 확정 (Day 4) |
 
 ---
@@ -26,7 +26,7 @@
 
 | API | `.env` 키 | 수집기 | 요청 지연 | Day 2 수집 결과 |
 |---|---|---|---:|---|
-| 네이버 검색 (NAVER API HUB) | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | `collector/collect_naver.py` | 0.3s | 200회 호출, 블로그·카페 요약문 13,357건 (지식베이스 포함 1,046건) |
+| 네이버 검색 (NAVER API HUB) | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | `collector/collect_naver.py` | 0.3s | 200회 호출, 블로그·카페 요약문 13,357건 (지식베이스 포함 블로그 822건, 카페는 제외) |
 | 국가법령정보 공동활용 | `LAW_OPEN_API_OC` | `collector/collect_law.py` | 1.5s | 법률·시행령·시행규칙 3건 |
 | 열린국회정보 | `ASSEMBLY_API_KEY` | `collector/collect_assembly.py` | 1.0s | 제21대 14건·제22대 26건 의안 목록 → 문서 2건 |
 | OpenAI | `OPENAI_API_KEY` | `indexer/embed.py`, `rag/` | TPM 기준 조절 | 임베딩 69,636,257 토큰 (Day 3) |
@@ -91,7 +91,7 @@
 
 - Chroma 읽기 전용 조회와 쿼리 임베딩만 수행 (문서 임베딩·컬렉션 쓰기 금지)
 - 쿼리 임베딩 모델은 컬렉션 메타데이터 `embedding_model`을 따름 (data_spec §5-4)
-- 의존: `config`, `chromadb`, `openai`. `indexer/` import 금지
+- 의존: `config`, `chromadb`, `openai`, `numpy`, 하이브리드 검색 시 `rag/bm25.py`(`scipy`, `kiwipiepy`). `indexer/` import 금지
 - 챗봇과 평가가 같은 `Retriever` 사용
 
 ### 2-2. `Retriever`
@@ -163,10 +163,11 @@ Retriever(collection: str | None = None, top_k: int = config.TOP_K)
 
 ```
 python -m eval.run_eval --tag <태그> [--collection kb_A_te3s] [--retrieval-only] [--top-k 5] [--threshold <0~1>] [--prompt-version v1]
+                        [--hybrid 0|1] [--tier-bonus 1=0.04,2=0.04|none] [--primary-quota N] [--doc-chunk-cap N]
                         [--generations 3] [--workers 4] [--ids q001,q002] [--changed-variable "<설명>"] [--eval-set eval/eval_set.jsonl]
 ```
 
-- 챗봇과 같은 `build_chain(cfg)`로 검색·생성 수행. 실험 설정(`collection`, `top_k`, `score_threshold`, `prompt_version`)만 `cfg`로 덮어씀
+- 챗봇과 같은 `build_chain(cfg)`로 검색·생성 수행. 명령행에서 지정한 실험 설정(`collection`, `top_k`, `score_threshold`, `prompt_version`, `hybrid`, `tier_bonus`, `primary_quota`, `doc_chunk_cap`)만 `cfg`로 덮어쓰고 나머지는 `config` 기본값 사용
 - 검색 지표는 `Prepared.candidates`(검색 후보 `fetch_k` 청크)와 `Prepared.chunks`(생성 단계 컨텍스트)에서 산출
 - `--retrieval-only`: `prepare`만 실행 (LLM 호출 없음). 생략 시 full 모드
 - full 모드: 문항당 `--generations`회 생성 (`config.EVAL_GENERATIONS`, 기본 3), `--workers` 동시 호출
@@ -237,7 +238,7 @@ python -m eval.run_eval --tag <태그> [--collection kb_A_te3s] [--retrieval-onl
 | `prepare(question, history=None, filters=None)` | 질문, 이전 대화 `[{"role": "user"/"assistant", "content"}]`, 필터 (§2-3) | `Prepared` | ①~④. UI가 "검색 중" 단계 표시에 사용 |
 | `stream(prep)` | `Prepared` | 문자열 토큰 generator | ⑤. `st.write_stream`에 그대로 전달. 생성 생략 상태면 안내문 1회 반환 |
 | `finalize(prep, text)` | `Prepared`, 생성 전문 | `RagAnswer` | ⑥ |
-| `invoke(question, history=None, filters=None)` | 위와 같음 | `RagAnswer` | 비스트리밍 일괄 실행 (평가용) |
+| `invoke(question, history=None, filters=None)` | 위와 같음 | `RagAnswer` | 비스트리밍 일괄 실행 (`prepare` → `stream` → `finalize`). 평가 하네스는 문항당 여러 번 생성하므로 세 메서드를 직접 호출 |
 
 ### 4-4. `Prepared`
 
@@ -262,7 +263,7 @@ python -m eval.run_eval --tag <태그> [--collection kb_A_te3s] [--retrieval-onl
 | `citations` | list[dict] | 답변 속 인용 `[{"n", "doc_id"}]` (등장 순, 중복 제거) |
 | `invalid_citations` | list[int] | 컨텍스트에 없는 번호 |
 | `refused` | bool | 거절 판정 (§4-7) |
-| `partial_refusal` | bool | 거절 문구와 인용이 함께 있는 경우 (일부 항목만 확인 불가) |
+| `partial_refusal` | bool | 첫 문장은 거절이 아니나 이후 서술에 거절 표현이 있는 경우 (일부 항목만 확인 불가, §4-7) |
 | `latency_ms` | dict | `{"rewrite", "retrieve", "generate", "total"}` |
 | `config` | dict | 사용한 `cfg` 사본 |
 

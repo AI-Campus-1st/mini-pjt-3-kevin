@@ -2,6 +2,7 @@
 청크 임베딩·Chroma 적재 (data_spec §5)
 - docs.db chunks 테이블의 컬렉션별 청크를 OpenAI 임베딩으로 변환하여 store/chroma/에 적재
 - 재실행 시 이미 적재된 chunk_id는 건너뜀 (중단 후 재개 가능)
+- 적재된 chunk_id라도 저장 텍스트가 chunks 테이블과 다르면 삭제 후 다시 임베딩 (정제·청킹 규칙 변경 반영)
 - chunks 테이블에 없는 chunk_id는 Chroma에서 삭제 (문서 제외 시 재임베딩 없이 동기화)
 - 분당 토큰 한도(TPM) 안에서 호출하도록 최근 60초 사용량 기준으로 대기, 오류 시 지수 백오프 재시도
 - 호출별 토큰 사용량은 data/interim/embed_log.jsonl에 기록 (비용·호출량 추적)
@@ -79,6 +80,16 @@ class TokenPacer:
             time.sleep(max(wait, 0.5))
 
 
+def changed_ids(coll, texts: dict[str, str], batch: int = 5000) -> list[str]:
+    """Chroma에 저장된 청크 텍스트가 chunks 테이블과 다른 chunk_id
+    - chunk_id는 문서 내 순번이므로 정제·청킹 규칙이 바뀌면 같은 chunk_id에 다른 텍스트가 배정됨 → 옛 벡터가 남는 것 방지"""
+    ids, out = sorted(texts), []
+    for i in range(0, len(ids), batch):
+        got = coll.get(ids=ids[i:i + batch], include=['documents'])
+        out += [cid for cid, doc in zip(got['ids'], got['documents']) if doc != texts[cid]]
+    return out
+
+
 def make_batches(rows: list, enc) -> list[list]:
     batches, cur, cur_tok = [], [], 0
     for r in rows:
@@ -129,9 +140,11 @@ def run(preset: str, title_prefix: bool = True, model: str = config.EMBEDDING_MO
                   'n_docs': len({r['doc_id'] for r in rows}), 'n_chunks': len(rows)})
     stored = set(coll.get(include=[])['ids'])
     stale = sorted(stored - {r['chunk_id'] for r in rows})
-    for i in range(0, len(stale), 5000):
-        coll.delete(ids=stale[i:i + 5000])
-    done = stored - set(stale)
+    changed = changed_ids(coll, {r['chunk_id']: r['text'] for r in rows if r['chunk_id'] in stored})
+    drop = stale + changed
+    for i in range(0, len(drop), 5000):
+        coll.delete(ids=drop[i:i + 5000])
+    done = stored - set(drop)
     todo = [r for r in rows if r['chunk_id'] not in done]
     enc = tiktoken.get_encoding('cl100k_base')
     batches = make_batches(todo, enc)
@@ -165,5 +178,5 @@ def run(preset: str, title_prefix: bool = True, model: str = config.EMBEDDING_MO
         meta.update({'n_docs': n_docs, 'n_chunks': n_chunks, 'synced_at': now_kst()})
         coll.modify(metadata=meta)
     return {'collection': coll_name, 'chunks_total': len(rows), 'added': added, 'deleted': len(stale),
-            'already': len(done),
+            'changed': len(changed), 'already': len(done),
             'chroma_count': coll.count(), 'tokens': used_tokens, 'elapsed_sec': round(time.time() - t0, 1)}

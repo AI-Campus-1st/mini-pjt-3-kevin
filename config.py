@@ -67,7 +67,8 @@ SNIPPET_TOP_PER_QUERY = {'blog': 220, 'cafe': 50}
 NEWS_KEYS = r'지역화폐|지역사랑상품권|지역상품권'
 RELEVANCE_MIN_COUNT = 2
 RELEVANCE_MIN_DENSITY_PER_1K = 1.0
-PRIMARY_MIN_COUNT = 1
+# 보도자료 관련도: 제목 포함 또는 본문 N회 이상 (다주제 보도자료의 부수 언급 배제)
+PRESS_RELEASE_MIN_COUNT = 2
 NEARDUP_THRESHOLD = 0.7
 MINHASH_NUM_PERM = 64
 MINHASH_SHINGLE = 5

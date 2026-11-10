@@ -2,6 +2,8 @@
 의안 목록 수집 (열린국회정보 Open API, 국회의원 발의법률안)
 - 의안정보시스템은 robots.txt 전면 차단 → API만 사용
 - 대수(AGE)별 법안 목록을 하나의 문서로 저장 (개별 의안 행은 제목이 동일하여 단독 문서로는 변별력 없음)
+- 이미 등록된 대수는 doc_id 유지 (날짜부가 최신 발의일이라 새 의안 발의 시 doc_id가 바뀌는 것 방지, data_spec §2-4)
+- 등록 문서의 원본이 있으면 재수집하지 않고, 원본만 없으면 API를 다시 호출해 복원 (목록 갱신은 원본 파일 삭제 후 재실행)
 """
 import json
 import os
@@ -39,15 +41,22 @@ def run() -> dict:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stats = {}
     for age in config.ASSEMBLY_AGES:
-        rows = fetch_all(sess, key, age)
         canonical = f'assembly:bills:{age}:{config.ASSEMBLY_BILL_NAME}'
+        path = OUT_DIR / f'bills_age{age}.json'
+        prev = manifest.find_key(canonical)
+        if prev and path.exists():
+            stats[f'age{age}'] = 'skipped_exists'
+            continue
+        rows = fetch_all(sess, key, age)
         dates = sorted(r.get('PROPOSE_DT') or '' for r in rows)
         published_at = dates[-1] if dates else ''
-        doc_id = make_doc_id('assembly', published_at, canonical)
-        path = OUT_DIR / f'bills_age{age}.json'
-        path.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding='utf-8')
+        doc_id = prev['doc_id'] if prev else make_doc_id('assembly', published_at, canonical)
+        if rows:
+            path.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding='utf-8')
         stats[f'age{age}'] = len(rows)
-        if doc_id in manifest or not rows:
+        if prev and rows:
+            log_collect('assembly', f'AGE={age}', 'ok', 200, f'raw restored, {len(rows)} bills')
+        if prev or not rows:
             continue
         manifest.add({
             'doc_id': doc_id, 'source': 'assembly', 'doc_type': 'bill',

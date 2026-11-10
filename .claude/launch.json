@@ -6,12 +6,6 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "streamlit", "run", "app/main.py", "--server.port", "8501", "--server.headless", "true", "--browser.gatherUsageStats", "false"],
       "port": 8501
-    },
-    {
-      "name": "chatbot-layercheck",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd /d C:\\Users\\student\\AppData\\Local\\Temp\\claude\\97a2928240462a22\\b2c00372-ab11-4c57-8f57-dddd45de9509\\scratchpad\\layer_check && C:\\Users\\student\\workspace\\mini-pjt-3-kevin\\.venv\\Scripts\\python.exe -m streamlit run app/main.py --server.port 8502 --server.headless true --browser.gatherUsageStats false"],
-      "port": 8502
     }
   ]
 }

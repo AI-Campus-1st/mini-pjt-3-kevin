@@ -69,9 +69,9 @@
 | D2 | 대상 사용자 | 확정 | 지자체 지역경제과 담당자 (정책 브리핑·민원 응대·예산 논리 준비) | 공공 업무용 = 원문 연결이 핵심이라는 가이드 취지와 일치 |
 | D3 | 지식베이스 규모 | 확정 (Day 4 카페·양산형 블로그 제외, WO-01 1차 자료 5건 추가) | 전처리 후 뉴스 전량 (샘플링 미적용, 실제 적재 17,327건) + 1차 자료 100건 + 블로그 822건 = 18,249건. 카페 205건은 게시일 미제공으로 제외 (`config.KB_EXCLUDE_TYPES`), 양산형 블로그 2곳은 `config.KB_EXCLUDE_BLOGS`로 제외 | 청크(설정 A) 53,807개 중 뉴스 95.0%, 1차 자료 3.5%, 블로그 1.5%. 재임베딩 시간이 일정을 위협하면 §8 범위 축소 순서에 따라 뉴스 수 축소 |
 | D4 | 임베딩 | 확정 (baseline) | OpenAI `text-embedding-3-small` | 제공 키로 사용 가능 확인(2026-11-05), 저비용. 여유 시 `-3-large`와 동일 평가셋 비교 |
-| D5 | 벡터DB / 원문DB | 권장 | Chroma(PersistentClient, `store/chroma/`) + SQLite(`store/docs.db`) | 가이드 권장 구조 그대로, 파일 영속화. Python 3.14에서 동작 확인 |
+| D5 | 벡터DB / 원문DB | 확정 | Chroma(PersistentClient, `store/chroma/`) + SQLite(`store/docs.db`) | 가이드 권장 구조 그대로, 파일 영속화. Python 3.14에서 동작 확인 |
 | D6 | 생성 모델 | 확정 | OpenAI `gpt-6-luna` | 제공 키로 호출 확인(2026-11-05). temperature는 기본값(1)만 지원하여 0 고정 불가 → 검색 지표(Hit@k, MRR)는 영향 없음, 답변 품질 평가는 문항당 3회 생성 후 다수결 판정 (Day 4 결정, `config.EVAL_GENERATIONS`). reasoning_effort는 모델 기본값. 모델명은 `.env`/config로 고정 |
-| D7 | 심화 확장 1개 | 권장 | **하이브리드 검색 (BM25 + 벡터)** | 정책 질문은 법령명·사업명·수치(할인율 10%, 국비 2%) 등 고유명사 비중이 높음 → 개선폭 측정이 명확 |
+| D7 | 심화 확장 1개 | 확정 (Day 5 채택) | **하이브리드 검색 (BM25 + 벡터)** | 정책 질문은 법령명·사업명·수치(할인율 10%, 국비 2%) 등 고유명사 비중이 높음 → 개선폭 측정이 명확 |
 
 ### 2-1. 주제 선택 근거 — 왜 지역화폐인가
 
@@ -133,11 +133,11 @@ mini-pjt-3-kevin/
 ├── data/raw/                 # 직접 수집 원본 (html/pdf/json, gitignore)
 ├── data/manifest.jsonl       # 직접 수집 문서의 출처·수집 일시 (git 추적)
 ├── notebooks/eda.ipynb
-├── collector/  __main__.py load_provided.py crawl_korea_kr.py crawl_assembly.py crawl_reports.py crawl_blog.py storage.py
-├── indexer/    __main__.py parse.py relevance.py dedup.py chunk.py embed.py verify.py
-├── store/      chroma/ docs.db
-├── rag/        retriever.py chain.py prompts.py
-├── eval/       eval_set.jsonl run_eval.py grade_sheet.csv results/<tag>/
+├── collector/  __main__.py load_provided.py crawl_korea_kr.py collect_law.py collect_assembly.py collect_naver.py register_manual.py storage.py
+├── indexer/    __main__.py build_docs.py parse.py clean.py relevance.py dedup.py chunk.py embed.py verify.py bm25.py
+├── store/      chroma/ docs.db bm25/
+├── rag/        retriever.py bm25.py chain.py prompts.py docstore.py
+├── eval/       eval_set.jsonl run_eval.py grade.py compare.py validate_set.py find_gold.py results/<일시>_<tag>/ (grade_sheet.csv 포함)
 ├── app/        main.py chat.py dashboard.py
 └── report/
 ```
@@ -186,8 +186,8 @@ mini-pjt-3-kevin/
 | **P0** | 개정 법안 + 의안 관련 문서 | 열린국회정보 Open API (의안정보시스템은 robots.txt 전면 차단) | API 목록 조회 + 수동 확보 PDF 3건 (2024 재의요구서, 2024-09-19 본회의 회의록, 법사위 체계자구 검토보고) | API 목록 + 3건 | 쟁점·종합 |
 | **P1** | 정책·연구 보고서 (효과 평가 찬반) | 한국조세재정연구원, 한국지방행정연구원(정책브리프 2건·학술지 논문 1건), 경기연구원 | PDF 수동 다운로드 (확보 완료) | 5건 | 종합·판단 (상충 근거) |
 | **P1** | 예산 자료 (연도별 국비) | 국회예산정책처 2026년도 예산안 위원회별 분석 (지역사랑상품권 부분 22·112~118쪽), 행안부 예산 보도자료 | PDF 수동 다운로드 (확보 완료) + korea.kr 보도자료 | 1건 + 보도자료 | 시점 |
-| **P2** | 지자체 지역화폐 공고·안내 | 경기·서울·인천 등 3~5곳 | HTML | 10~30건 | 비교 |
-| **P2** | 블로그 (사용·구매 후기) | 네이버 검색 API (블로그) | API 요약문만 (blog.naver.com robots.txt가 RAG 목적 봇 접근 금지 명시 → 본문 수집 제외) | 블로그:카페 = 80:20 (검색어별 상위 220건, 지식베이스 841건) | 현장 반응 |
+| **P2** | 지자체 지역화폐 공고·안내 | 경기·서울·인천 등 3~5곳 | HTML | 10~30건. **미수집**: 이용 조건 미확인으로 보류 (WO-01 후속 조치) | 비교 |
+| **P2** | 블로그 (사용·구매 후기) | 네이버 검색 API (블로그) | API 요약문만 (blog.naver.com robots.txt가 RAG 목적 봇 접근 금지 명시 → 본문 수집 제외) | 블로그:카페 = 80:20 (검색어별 상위 220건, 지식베이스 822건) | 현장 반응 |
 | **P2** | 카페 (사용처·가맹점 관련 게시글) | 네이버 검색 API (카페) | API 요약문만 (cafe.naver.com robots.txt가 RAG 목적 봇 접근 금지 및 전면 차단 → 본문 수집 제외) | 200~500건 (검색어별 상위 50건). **Day 4 지식베이스 제외**: API가 게시일을 제공하지 않아 발행일 기록 요건(가이드 7장) 미충족 | 현장 반응 |
 
 소스별 robots.txt 판정과 API 발급 필요 항목은 [source_access.md](source_access.md)에 기록. 막히면 대체 소스로 바꾸고 경위를 기록(리포트 2항).
@@ -313,7 +313,7 @@ mini-pjt-3-kevin/
 |---|---|---|
 | 계층 분리·독립 실행 | `collector/`, `indexer/`, `store/`, `rag/`, `app/` + README 실행 순서 | 2~4, 6 검증 |
 | 직접 수집 1차 자료 포함 | `data/manifest.jsonl`, KB 구성 표 | 1~2 |
-| 청크 메타 (출처·제목·URL·발행일·종류) | §4-2 스키마, `verify.py` 출력 | 2~3 |
+| 청크 메타 (출처·제목·URL·발행일·종류) | data_spec §5-3, `verify.py` 출력 | 2~3 |
 | 벡터DB 영속화 | `store/chroma/` | 3 |
 | LangChain RAG 체인 | `rag/chain.py` | 4 |
 | 출처 명시·원문 확인 | 챗 UI 출처 목록 + 원문 expander | 4 |
@@ -347,7 +347,7 @@ mini-pjt-3-kevin/
 | 항목 | 상태 | 결과 / 산출물 |
 |---|---|---|
 | 설정 단일화 | 완료 | `config.py` |
-| 수집 계층 | 완료 | `collector/` (제공 뉴스 36,887건 적재, 보도자료 247건, 법령 3건, 의안 목록 2건, 수동 자료 10건, 블로그·카페 요약문 13,357건) |
+| 수집 계층 | 완료 | `collector/` (제공 뉴스 36,887건 적재, 보도자료 247건 — 그중 11건은 첨부 없이 HTML만 저장되어 본문 추출 불가, `parse_error`로 제외 —, 법령 3건, 의안 목록 2건, 수동 자료 10건, 블로그·카페 요약문 13,357건) |
 | 원문 DB 구축 (파싱·정제·관련도·중복) | 완료 | `store/docs.db` 지식베이스 18,468건 (뉴스 17,327, 보도자료 81, 블로그 841, 카페 205, 1차 자료 14) |
 | 청킹 3종 | 완료 | 설정 A 53,743개, 설정 B 30,614개, A 제목 미포함 53,743개 (`chunks` 테이블) |
 | 평가셋 60문항 | 확정 (사용자 검토 완료, 60문항 유지) | 확정본 `eval/eval_set.jsonl` (단순 사실 22, 비교 10, 시점 10, 종합 10, 답변 불가 8), 초안 `eval/eval_set_draft.jsonl`, 검토 시트 `eval/eval_review.csv`, 검증 도구 `eval/validate_set.py`, 정답 탐색 도구 `eval/find_gold.py` |
@@ -386,6 +386,8 @@ mini-pjt-3-kevin/
 - top-1 유사도 평균: 적중 0.639, 미적중 0.637, 답변 불가 0.594 (최소 0.371, 최대 0.703) → 유사도 임계값만으로는 답변 불가 문항 분리가 어려움 (E3 설계 시 반영)
 - Gate "Hit@3 수치 제시 가능" 충족, 목표치 Hit@3 ≥ 0.75에는 미달
 - 정답 범위: **엄격 유지** (사용자 결정, 2026-11-06). 같은 사실을 담은 뉴스를 `gold_patterns`로 정답에 추가하지 않음 → Hit@k는 "1차 근거 문서를 찾았는가"를 측정하며, 1차 자료가 뉴스·블로그에 밀리는 현상을 Day 5 개선 대상으로 다룸
+  - 적용 범위: Day 2에 작성한 `gold_patterns` 7문항은 유지. q030·q031·q050은 뉴스 다수 문서 종합 문항(정답 문서 지정 없음), q034·q041·q051·q052는 1차 정답 문서와 함께 패턴 일치 뉴스(각 301·141·158·929건)도 정답으로 인정 → 이 4문항의 Hit@k는 "1차 근거 문서 또는 같은 사실을 담은 뉴스를 찾았는가"를 측정
+  - q034의 필수 사실 정규식(`0원|전액 삭감`)은 정답 문서 본문에 없고 패턴 일치 뉴스에만 존재 (`python -m eval.validate_set` 확인 필요 1문항)
 - 목표치 판정 지표: **문서 단위 Hit@3** (사용자 결정, 2026-11-06). 상위 50청크를 doc_id로 중복 제거한 순위 기준. `ctx_hit@5`(생성 단계 상위 5청크 내 정답 포함)는 보조 지표로 함께 기록
 - 목표치: **Hit@3 ≥ 0.75 유지** (사용자 결정, 2026-11-06). baseline 0.558 대비 +0.192 필요 → Day 5 개선(문서 종류별 검색 할당, 하이브리드 검색 등)의 판정 기준
 
@@ -469,7 +471,7 @@ mini-pjt-3-kevin/
 | E0 full 실행 | 완료 | `eval/results/20261107-1509_baseline/` (생성 180회, 재시도 0회) |
 | 답변 채점 (E0·채택 검색 v1·v2) | 완료 (Day 6, 채점 출처는 Day 6 진행 현황 참조) | 각 결과 폴더의 `grade_sheet.csv`, `graded_summary.json` |
 | 검색 개선 실험 (retrieval-only) | 완료 | 신뢰등급 가산점, 1차 자료 할당, 문서당 청크 제한, 하이브리드(E5), 조합 13종 |
-| BM25 인덱스 | 완료 | `python -m indexer bm25 --collection kb_A_te3s` → `store/bm25/` (어휘 52,397개, 구축 약 80초), 검색 `rag/bm25.py` |
+| BM25 인덱스 | 완료 | `python -m indexer bm25 --collection kb_A_te3s` → `store/bm25/` (어휘 52,459개, 구축 약 80초), 검색 `rag/bm25.py` |
 | E3 임계값 | 완료 (미채택) | 아래 "E3 임계값" |
 | E4 프롬프트 v2 | 완료 (채택, Day 6) | `rag/prompts.py` `SYSTEM_V2`, `eval/results/20261107-1532_prompt_v2/` |
 | 평가 대시보드 | 완료 | `app/dashboard.py` (Plotly: 검색 실험 비교, 유형별 Hit@3, 답변 지표·채점 결과, 유사도 분포와 임계값, 지식베이스 구성, 응답시간) |
@@ -526,6 +528,7 @@ mini-pjt-3-kevin/
 | `20261107-1532_prompt_v2` | 채택 | v2 | 0.875 | 0.058 | 0.269 | 0.816 | 0.723 | 4.0초 |
 
 - 정답 문서 인용률·필수 사실 포함률은 거절하지 않은 답변 대상의 자동 참고값 (정확도·출처 정확성 판정은 직접 채점)
+- 이 표의 거절 정확도·오거절률은 자동 판정(첫 문장 거절 정규식, 3회 생성 다수결) 기준. 성공 기준 판정에는 Day 6 채점 기준 값을 사용
 - 검색 개선만으로 오거절률 0.365 → 0.192 (정답 문서가 컨텍스트에 들어온 문항이 답변으로 전환)
 - 프롬프트 v2: 오거절률 0.192 → 0.058 (v1에서 거절한 10문항 중 7문항 답변), 대신 부분 거절률 상승(일부 확인 불가를 본문에 명시)
 - v2 거절 정확도 0.875: q058(2031년 발행 목표, 실제 자료는 2030년 목표만 존재)에서 첫 문장을 거절로 시작하지 않고 "31.2조 원 목표가 2031년 목표인지는 확인할 수 없음"으로 답변 → 근거 없는 수치 생성은 아니나 자동 판정은 비거절. 직접 채점(`refusal_correct`)에서 판정
@@ -537,7 +540,7 @@ mini-pjt-3-kevin/
 |---|---|---|
 | 답변 채점 반영 | 완료 | E0·채택 검색 v1·v2 세 실행의 `grade_sheet.csv` 기입 후 `python -m eval.grade` → `graded_summary.json` |
 | 프롬프트 v2 채택 | 완료 | `config.PROMPT_VERSION = 'v2'`, `docs/api_spec.md` 기본값 표기 갱신 |
-| 계층 분리 검증 | 통과 | 스크래치 폴더에 `app/`·`rag/`·`config.py`·`.env`·`eval/results/`만 복사, `store/`는 디렉터리 연결. `indexer`·`collector` import 불가 상태에서 체인 단독 호출, Streamlit 챗(단일 질문·멀티턴)·대시보드(Plotly 8개) 정상, 서버·브라우저 오류 0건, 두 모듈 로드 0건. 실행 설정 `.claude/launch.json`의 `chatbot-layercheck` |
+| 계층 분리 검증 | 통과 | 별도 폴더에 `app/`·`rag/`·`config.py`·`.env`·`eval/results/`만 복사, `store/`는 디렉터리 연결. `indexer`·`collector` import 불가 상태에서 체인 단독 호출, Streamlit 챗(단일 질문·멀티턴)·대시보드(Plotly 8개) 정상, 서버·브라우저 오류 0건, 두 모듈 로드 0건 |
 | `.env` 노출 점검 | 통과 | `.gitignore` 등록, 추적 파일은 `.env.example`(키 이름만)뿐, 추적 파일과 전체 git 이력에서 키 형태 문자열 0건 |
 | 스크린샷 | 완료 | `report/images/` 4장 (첫 화면, 종합 질문 답변, 멀티턴·범위 밖 질문, 평가 대시보드 — 세 실행 채점 결과 포함). headless Chrome(CDP)으로 Streamlit 조작 후 캡처 |
 | 리포트 10항목 | 완료 | `report/report.md` |
@@ -557,6 +560,8 @@ mini-pjt-3-kevin/
 | 채택 검색 v1 | 0.769 | 90.4% | 33/14/5 | 100% | 1.000 | 0.212 | 검색 18, 인덱싱 1 |
 | 채택 검색 v2 (최종) | 0.769 | 90.4% | 33/14/5 | 100% | 1.000 | 0.077 | 검색 18, 인덱싱 1 |
 
+- 오거절률은 채점 기준(답변 가능 문항 중 `refusal_correct = N` 비율). 자동 판정(0.365 / 0.192 / 0.058)과의 차이는 q026 1문항 (첫 문장이 거절 문구는 아니나 비교 불가로 시작하여 채점에서 오거절로 판정)
+- 거절로 판정된 답변도 확인된 내용을 함께 제시한 경우 부분 점수 부여: 채택 검색 v1의 부분 14문항 중 6문항(q004·q025·q028·q030·q031·q040), 최종(v2)의 부분 14문항 중 1문항(q031)
 - 성공 기준 전 항목 달성 (Hit@3 0.750, 정확+부분 90.4%, 출처 정확성 100%, 거절 정확도 100%, 오거절률 7.7%, 계층 분리 통과)
 - 최종 실패 18건(검색) 중 12건은 정답 문서가 문서 단위로 적중했으나 필요한 청크가 컨텍스트에 없음 → 문서 단위 Hit@3가 답변 가능성을 과대평가 (리포트 8-1)
 - 비교 문항은 두 대상 중 한쪽만 검색되는 실패가 남음 (q025·q029·q030·q031·q026), 멀티턴 비교 후속 질의에서도 재현 (리포트 8-2)

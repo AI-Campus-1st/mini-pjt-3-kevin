@@ -2,6 +2,9 @@
 블로그·카페 요약문 수집 (NAVER API HUB 검색 API)
 - blog.naver.com, cafe.naver.com robots.txt가 RAG 목적 봇 접근을 금지 → 본문 미수집, API 응답(제목·요약문·링크)만 사용
 - 무료 제공량(일 25,000건)을 상한으로 두고, 날짜별 누적 호출 수가 상한에 도달하면 중단
+- 검색어별 응답 파일이 이미 있으면 API를 호출하지 않고 그 파일을 사용
+  - 인덱서가 요약문과 검색 순위를 이 파일에서 읽으므로, 덮어쓰면 등록 문서의 요약문·순위가 바뀌어 지식베이스 구성이 달라짐
+  - 검색 결과를 갱신하려면 해당 파일을 삭제한 뒤 재실행
 """
 import html
 import json
@@ -41,31 +44,36 @@ def run() -> dict:
     manifest = Manifest()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     quota = Quota()
-    stats = {'calls': 0, 'items': 0, 'added': 0, 'dup_link': 0}
+    stats = {'calls': 0, 'items': 0, 'added': 0, 'dup_link': 0, 'reused_files': 0}
 
     for kind in config.NAVER_KINDS:
         source = 'blog' if kind == 'blog' else 'cafe'
         kind_dir = OUT_DIR / kind
         kind_dir.mkdir(exist_ok=True)
         for q in config.NAVER_QUERIES:
-            items = []
-            for start in range(1, config.NAVER_MAX_START + 1, config.NAVER_DISPLAY):
-                if quota.used() >= config.NAVER_DAILY_LIMIT:
-                    log_collect(source, q, 'skip', 0, 'daily quota reached')
-                    return stats
-                r = sess.get(config.NAVER_ENDPOINT.format(kind=kind), headers=headers,
-                             params={'query': q, 'display': config.NAVER_DISPLAY, 'start': start, 'sort': 'sim'})
-                quota.spend()
-                stats['calls'] += 1
-                if r.status_code != 200:
-                    log_collect(source, f'{kind}:{q}:{start}', 'error', r.status_code, r.text[:200])
-                    break
-                batch = r.json().get('items', [])
-                items += batch
-                if len(batch) < config.NAVER_DISPLAY:
-                    break
             safe_q = re.sub(r'\s+', '_', q)
-            (kind_dir / f'{safe_q}.json').write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding='utf-8')
+            q_path = kind_dir / f'{safe_q}.json'
+            if q_path.exists():
+                items = json.loads(q_path.read_text(encoding='utf-8'))
+                stats['reused_files'] += 1
+            else:
+                items = []
+                for start in range(1, config.NAVER_MAX_START + 1, config.NAVER_DISPLAY):
+                    if quota.used() >= config.NAVER_DAILY_LIMIT:
+                        log_collect(source, q, 'skip', 0, 'daily quota reached')
+                        return stats
+                    r = sess.get(config.NAVER_ENDPOINT.format(kind=kind), headers=headers,
+                                 params={'query': q, 'display': config.NAVER_DISPLAY, 'start': start, 'sort': 'sim'})
+                    quota.spend()
+                    stats['calls'] += 1
+                    if r.status_code != 200:
+                        log_collect(source, f'{kind}:{q}:{start}', 'error', r.status_code, r.text[:200])
+                        break
+                    batch = r.json().get('items', [])
+                    items += batch
+                    if len(batch) < config.NAVER_DISPLAY:
+                        break
+                q_path.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding='utf-8')
             stats['items'] += len(items)
             for it in items:
                 link = it.get('link', '')
@@ -80,7 +88,7 @@ def run() -> dict:
                     'canonical_key': f'{source}:{link}', 'title': strip_tags(it.get('title')),
                     'publisher': it.get('bloggername') or it.get('cafename') or '',
                     'published_at': published_at, 'collected_at': now_kst(), 'collect_method': 'api',
-                    'raw_path': rel_path(kind_dir / f'{safe_q}.json'), 'http_status': 200,
+                    'raw_path': rel_path(q_path), 'http_status': 200,
                     'note': f'검색어: {q}. 요약문만 수집',
                 })
                 stats['added'] += 1

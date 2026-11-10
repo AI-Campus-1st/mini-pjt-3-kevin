@@ -15,3 +15,7 @@ __pycache__/
 /store/chroma/
 /store/docs.db
 /store/bm25/
+
+# 채점 작업 사본 (집계 대상은 grade_sheet.csv, graded_summary.json)
+/eval/results/*/grade_sheet_*.csv
+/eval/results/*/graded_summary_*.json
